@@ -243,6 +243,18 @@ journal-after-commit, flush-after-compact, segment-upload-before-manifest,
 clear-publish-before-delete, compact-publish-before-delete.
 
 
+### Standby supervisor (automatic failover loop)
+
+`Supervisor::new(store, cfg, opts, poll).run(&stop, handler)` is the engine-side
+standby primitive: it polls `try_open_leased`, promotes this process to writer
+whenever the shared prefix has no active lease, calls `handler(engine)` for one
+leadership term, then releases the engine and returns to standby. A handler can
+serve until lease loss / shutdown and simply return; the loop re-promotes on the
+next free lease. Node membership, transport and client routing remain an
+application concern (as in Redis Cluster).
+`supervisor_promotes_across_terms_and_persists` verifies that writes from
+successive leadership terms all persist.
+
 ### Read replicas: followers over a shared prefix
 
 `ObjectLsm::open_follower(store, cfg, refresh)` opens a read-only engine over the

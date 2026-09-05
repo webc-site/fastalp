@@ -35,6 +35,7 @@ mod scan;
 pub mod segment;
 pub mod state;
 pub mod store;
+pub mod supervisor;
 
 pub use batch::ObjectLsmBatch;
 pub use cache::{BlockCache, IndexCache};
@@ -52,6 +53,7 @@ pub use error::{Error, Result};
 pub use metrics::MetricsSnapshot;
 pub use partition::{ObjectLsmEntry, ObjectLsmIter, ObjectLsmPartition};
 pub use store::{MemoryStore, Store};
+pub use supervisor::Supervisor;
 
 /// Bridge so `wedb_embed` can use this engine as a backend
 /// (`wedb_embed::Error: From<E::Error>` bound on its `Db` methods).
