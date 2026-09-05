@@ -101,3 +101,35 @@ fn follower_metrics_count_refresh_and_reads() {
   assert_eq!(m.gets, 1);
   assert_eq!(m.commits, 0, "follower never commits");
 }
+
+#[test]
+fn metrics_export_prometheus_and_json() {
+  let s = MemoryStore::new();
+  let cfg = cfg("mt/3");
+  let db = ObjectLsm::open(Arc::new(s.clone()), cfg.clone()).unwrap();
+  let p = db.partition("data").unwrap();
+  p.insert(b"k1", b"v1").unwrap();
+  p.get(b"k1").unwrap();
+  db.compact().unwrap();
+
+  let m = db.metrics();
+  let json: serde_json::Value = serde_json::from_str(&m.to_json()).unwrap();
+  assert!(json.get("puts").unwrap().as_u64().unwrap() >= 1);
+  assert!(json.get("gets").unwrap().as_u64().unwrap() >= 1);
+  assert!(json.get("segments").unwrap().as_u64().unwrap() >= 1);
+
+  let prom = m.to_prometheus();
+  let mut names = std::collections::BTreeMap::new();
+  for line in prom.lines() {
+    if line.starts_with('#') {
+      continue;
+    }
+    let (name, val) = line.split_once(' ').expect("prometheus line");
+    names.insert(name.to_string(), val.parse::<u64>().unwrap());
+  }
+  assert_eq!(names.len(), 11);
+  assert_eq!(names["wedb_object_lsm_puts"], m.puts);
+  assert_eq!(names["wedb_object_lsm_gets"], m.gets);
+  assert_eq!(names["wedb_object_lsm_segments"], m.segments as u64);
+  assert_eq!(names["wedb_object_lsm_memtable_bytes"], m.memtable_bytes);
+}

@@ -7,6 +7,9 @@ use std::sync::{
   atomic::{AtomicU64, Ordering},
 };
 
+/// Prometheus metric name prefix.
+const METRIC_PREFIX: &str = "wedb_object_lsm_";
+
 /// Cumulative operation counters (atomic, cheap to bump from hot paths).
 /// Public users interact with [`MetricsSnapshot`], not this type.
 #[derive(Clone, Default)]
@@ -25,7 +28,7 @@ struct MetricsInner {
 }
 
 /// A point-in-time, plain-value snapshot returned by [`crate::ObjectLsm::metrics`].
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
 pub struct MetricsSnapshot {
   /// Commit attempts that passed the writer gate and entered the commit
   /// pipeline (a journal PUT failure is still counted here).
@@ -82,5 +85,46 @@ impl Metrics {
       refreshes: self.inner.refreshes.load(Ordering::Relaxed),
       ..MetricsSnapshot::default()
     }
+  }
+}
+
+impl MetricsSnapshot {
+  /// Prometheus text exposition (counters/gauges with `# TYPE` lines, so
+  /// `rate()` and friends work). Values beyond `2^53` may lose precision in
+  /// float-based consumers; with these counters that is not reachable in
+  /// practice.
+  pub fn to_prometheus(&self) -> String {
+    let counters: [(&str, u64); 6] = [
+      ("commits", self.commits),
+      ("commit_failures", self.commit_failures),
+      ("puts", self.puts),
+      ("deletes", self.deletes),
+      ("gets", self.gets),
+      ("refreshes", self.refreshes),
+    ];
+    let gauges: [(&str, u64); 5] = [
+      ("journal_count", self.journal_count as u64),
+      ("journal_bytes", self.journal_bytes),
+      ("segments", self.segments as u64),
+      ("segment_bytes", self.segment_bytes),
+      ("memtable_bytes", self.memtable_bytes),
+    ];
+    let mut out = String::new();
+    for (name, v) in counters {
+      out.push_str(&format!(
+        "# TYPE {METRIC_PREFIX}{name} counter\n{METRIC_PREFIX}{name} {v}\n"
+      ));
+    }
+    for (name, v) in gauges {
+      out.push_str(&format!(
+        "# TYPE {METRIC_PREFIX}{name} gauge\n{METRIC_PREFIX}{name} {v}\n"
+      ));
+    }
+    out
+  }
+
+  /// JSON representation (stable field names via `serde`).
+  pub fn to_json(&self) -> String {
+    serde_json::to_string(self).expect("metrics serialize")
   }
 }
