@@ -3,21 +3,18 @@ use std::{
   fmt::Write as _,
   fs,
   io::{Read, Write},
-  mem::MaybeUninit,
-  os::unix::net::UnixStream,
-  path::Path,
+  path::{Path, PathBuf},
   process::Command,
   time::Duration,
 };
 
 use wedb_embed::{Fjall, WeDb};
 
+mod redis_conn;
+use redis_conn::RedisConn;
+
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
-const REDIS_SOCK: &str = "/tmp/wedb_redis_bench.sock";
-const REDIS_DATA_DIR: &str = "/tmp/wedb_redis_bench_data";
-pub const WEDB_BENCH_DIR: &str = "/tmp/wedb_bench_data_5gb";
 
 fn get_data_scale() -> (usize, usize) {
   let target_mb = env::var("BENCH_DATA_MB")
@@ -40,32 +37,7 @@ const GEO_KEY: &[u8] = b"geo:datacenters";
 
 /// 获取当前进程 Resident Set Size (RSS) 物理常驻内存
 fn get_rss_bytes() -> u64 {
-  let mut usage = MaybeUninit::<libc::rusage>::uninit();
-  let ret = unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) };
-  if ret == 0 {
-    let usage = unsafe { usage.assume_init() };
-    #[cfg(target_os = "macos")]
-    {
-      usage.ru_maxrss as u64
-    }
-    #[cfg(target_os = "linux")]
-    {
-      if let Ok(s) = std::fs::read_to_string("/proc/self/statm") {
-        if let Some(pages) = s.split_whitespace().nth(1) {
-          if let Ok(p) = pages.parse::<u64>() {
-            return p * 4096;
-          }
-        }
-      }
-      (usage.ru_maxrss as u64) * 1024
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-      usage.ru_maxrss as u64
-    }
-  } else {
-    0
-  }
+  redis_conn::rss_bytes()
 }
 
 /// 递归计算目录内全部文件实际物理磁盘占用总字节数
@@ -106,42 +78,68 @@ fn parse_redis_memory_from_str(s: &str) -> (u64, u64) {
 }
 
 /// 通过直连 Unix 套接字或 redis-cli 查询 Redis 内存占用
+fn query_redis_data_dir() -> PathBuf {
+  if let Ok(mut stream) =
+    RedisConn::connect_with_timeout(Duration::from_secs(10), Duration::from_secs(10))
+    && stream
+      .write_all(b"*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$3\r\ndir\r\n")
+      .is_ok()
+  {
+    let mut buf = [0u8; 8192];
+    if let Ok(n) = stream.read(&mut buf)
+      && n > 0
+    {
+      let s = String::from_utf8_lossy(&buf[..n]);
+      if let Some(line) = s.lines().nth(4) {
+        let line = line.trim();
+        let path = if let Some(p) = line.strip_prefix('/') {
+          PathBuf::from(format!("C:{p}"))
+        } else {
+          PathBuf::from(line)
+        };
+        if path.is_dir() {
+          return path;
+        }
+      }
+    }
+  }
+  redis_conn::redis_data_dir()
+}
+
 fn query_redis_memory() -> (u64, u64) {
   let mut mem = 0u64;
   let mut rss = 0u64;
 
-  // 1. 优先使用直连 UnixStream（独立干净连接，带长超时）
-  if let Ok(mut stream) = UnixStream::connect(REDIS_SOCK) {
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
-    if stream
+  // 1. 通过 RedisConn 直连查询内存
+  if let Ok(mut stream) =
+    RedisConn::connect_with_timeout(Duration::from_secs(10), Duration::from_secs(10))
+    && stream
       .write_all(b"*2\r\n$4\r\nINFO\r\n$6\r\nmemory\r\n")
       .is_ok()
-    {
-      let mut total_buf = Vec::with_capacity(8192);
-      let mut chunk = [0u8; 4096];
-      while let Ok(n) = stream.read(&mut chunk) {
-        if n == 0 {
-          break;
-        }
-        total_buf.extend_from_slice(&chunk[..n]);
-        let s = String::from_utf8_lossy(&total_buf);
-        let (m, r) = parse_redis_memory_from_str(&s);
-        if m > 0 && r > 0 {
-          mem = m;
-          rss = r;
-          break;
-        }
+  {
+    let mut total_buf = Vec::with_capacity(8192);
+    let mut chunk = [0u8; 4096];
+    while let Ok(n) = stream.read(&mut chunk) {
+      if n == 0 {
+        break;
       }
-      if mem == 0 || rss == 0 {
-        let s = String::from_utf8_lossy(&total_buf);
-        let (m, r) = parse_redis_memory_from_str(&s);
-        if m > 0 {
-          mem = m;
-        }
-        if r > 0 {
-          rss = r;
-        }
+      total_buf.extend_from_slice(&chunk[..n]);
+      let s = String::from_utf8_lossy(&total_buf);
+      let (m, r) = parse_redis_memory_from_str(&s);
+      if m > 0 && r > 0 {
+        mem = m;
+        rss = r;
+        break;
+      }
+    }
+    if mem == 0 || rss == 0 {
+      let s = String::from_utf8_lossy(&total_buf);
+      let (m, r) = parse_redis_memory_from_str(&s);
+      if m > 0 {
+        mem = m;
+      }
+      if r > 0 {
+        rss = r;
       }
     }
   }
@@ -149,7 +147,8 @@ fn query_redis_memory() -> (u64, u64) {
   // 2. 兜底回退：若直接通信异常或为 0，通过 redis-cli 获取
   if (mem == 0 || rss == 0)
     && let Ok(output) = Command::new("redis-cli")
-      .args(["-s", REDIS_SOCK, "info", "memory"])
+      .args(redis_conn::redis_cli_base_args())
+      .args(["info", "memory"])
       .output()
     && output.status.success()
   {
@@ -168,22 +167,23 @@ fn query_redis_memory() -> (u64, u64) {
 
 /// 触发 Redis 强制同步持久化落盘
 fn force_redis_save() {
-  if let Ok(mut stream) = UnixStream::connect(REDIS_SOCK) {
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(60)));
+  if let Ok(mut stream) =
+    RedisConn::connect_with_timeout(Duration::from_secs(60), Duration::from_secs(60))
+  {
     let _ = stream.write_all(b"*1\r\n$4\r\nSAVE\r\n");
     let mut buf = [0u8; 128];
     let _ = stream.read(&mut buf);
   } else {
     let _ = Command::new("redis-cli")
-      .args(["-s", REDIS_SOCK, "save"])
+      .args(redis_conn::redis_cli_base_args())
+      .arg("save")
       .output();
   }
 }
 
 /// 针对极速灌入优化的 Redis 客户端（零堆分配指令编码 + 批量流水线发送）
 struct FastRedisClient {
-  stream: UnixStream,
+  stream: RedisConn,
   send_buf: Vec<u8>,
   recv_buf: [u8; 65536],
   pending_cmds: usize,
@@ -192,9 +192,8 @@ struct FastRedisClient {
 
 impl FastRedisClient {
   fn new() -> Option<Self> {
-    let stream = UnixStream::connect(REDIS_SOCK).ok()?;
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(15)));
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(15)));
+    let stream =
+      RedisConn::connect_with_timeout(Duration::from_secs(15), Duration::from_secs(15)).ok()?;
     Some(Self {
       stream,
       send_buf: Vec::with_capacity(256 * 1024),
@@ -288,14 +287,14 @@ fn main() {
   let mut raw_bytes = 0usize;
 
   // 清理并创建基准数据目录
-  let wedb_data_path = Path::new(WEDB_BENCH_DIR);
+  let wedb_data_path = redis_conn::wedb_bench_dir();
   if wedb_data_path.exists() {
-    let _ = fs::remove_dir_all(wedb_data_path);
+    let _ = fs::remove_dir_all(&wedb_data_path);
   }
-  let _ = fs::create_dir_all(wedb_data_path);
+  let _ = fs::create_dir_all(&wedb_data_path);
 
   // 1. 测试并灌入 WeDb (全 10 种格式数据灌入)
-  let engine = Fjall::open(WEDB_BENCH_DIR).expect("open engine");
+  let engine = Fjall::open(redis_conn::wedb_bench_dir()).expect("open engine");
   let db = WeDb::new(engine).ns(0).expect("ns 0").db(0).expect("db 0");
 
   // 复用格式化缓冲区（彻底消除循环内堆内存分配）
@@ -432,7 +431,7 @@ fn main() {
   db.wedb().persist().expect("wedb persist");
 
   // 实测 WeDb 落盘物理文件总大小 (完整持久化数据)
-  let wedb_disk_bytes = dir_size(wedb_data_path);
+  let wedb_disk_bytes = dir_size(&wedb_data_path);
   // 实测 WeDb 进程 Resident Set Size (RSS)
   let wedb_rss_bytes = get_rss_bytes();
 
@@ -578,9 +577,9 @@ fn main() {
     }
 
     // 读取 Redis 磁盘持久化文件占用
-    let redis_data_path = Path::new(REDIS_DATA_DIR);
+    let redis_data_path = query_redis_data_dir();
     if redis_data_path.exists() {
-      redis_disk_bytes = dir_size(redis_data_path);
+      redis_disk_bytes = dir_size(&redis_data_path);
     }
   }
 

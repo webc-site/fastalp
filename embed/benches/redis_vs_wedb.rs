@@ -1,15 +1,15 @@
 use std::{
   io::{Read, Write},
   mem::forget,
-  os::unix::net::UnixStream,
-  path::Path,
   str,
   sync::OnceLock,
   time::Duration,
 };
 
+mod redis_conn;
 use divan::{Bencher, black_box};
 use rapidhash::RapidHashMap;
+use redis_conn::RedisConn;
 use tempfile::tempdir;
 use wedb_embed::{
   Fjall, WeDb,
@@ -30,10 +30,8 @@ fn main() {
   divan::main();
 }
 
-const REDIS_SOCK: &str = "/tmp/wedb_redis_bench.sock";
-
 struct FastRedisClient {
-  stream: UnixStream,
+  stream: RedisConn,
   buf: [u8; 8192],
   read_len: usize,
   msg: Vec<u8>,
@@ -42,7 +40,7 @@ struct FastRedisClient {
 
 impl FastRedisClient {
   fn new() -> Option<Self> {
-    let stream = UnixStream::connect(REDIS_SOCK).ok()?;
+    let stream = RedisConn::connect().ok()?;
     let _ = stream.set_read_timeout(Some(Duration::from_millis(1000)));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(1000)));
     Some(Self {
@@ -72,10 +70,8 @@ impl FastRedisClient {
       self.msg.extend_from_slice(b"\r\n");
     }
     if self.stream.write_all(&self.msg).is_err()
-      && let Ok(stream) = UnixStream::connect(REDIS_SOCK)
+      && let Ok(stream) = RedisConn::connect()
     {
-      let _ = stream.set_read_timeout(Some(Duration::from_millis(1000)));
-      let _ = stream.set_write_timeout(Some(Duration::from_millis(1000)));
       self.stream = stream;
       let _ = self.stream.write_all(&self.msg);
     }
@@ -83,13 +79,12 @@ impl FastRedisClient {
   }
 }
 
-const WEDB_BENCH_5GB_DIR: &str = "/tmp/wedb_bench_data_5gb";
 static WEDB_INSTANCE: OnceLock<wedb_embed::Db<Fjall>> = OnceLock::new();
 
 fn get_wedb() -> &'static wedb_embed::Db<Fjall> {
   WEDB_INSTANCE.get_or_init(|| {
-    let path = if Path::new(WEDB_BENCH_5GB_DIR).exists() {
-      WEDB_BENCH_5GB_DIR.to_string()
+    let path = if redis_conn::wedb_bench_dir().exists() {
+      redis_conn::wedb_bench_dir().to_string_lossy().to_string()
     } else {
       let dir = tempdir().expect("tempdir");
       let p = dir.path().to_string_lossy().to_string();

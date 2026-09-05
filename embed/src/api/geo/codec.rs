@@ -143,10 +143,8 @@ pub fn geohash_encode(
   if step == 0 || step > 32 || long_range.is_zero() || lat_range.is_zero() {
     return None;
   }
-  if longitude > GEO_LON_MAX
-    || longitude < GEO_LON_MIN
-    || latitude > GEO_LAT_MAX
-    || latitude < GEO_LAT_MIN
+  if !(GEO_LON_MIN..=GEO_LON_MAX).contains(&longitude)
+    || !(GEO_LAT_MIN..=GEO_LAT_MAX).contains(&latitude)
   {
     return None;
   }
