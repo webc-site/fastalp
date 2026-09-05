@@ -27,6 +27,7 @@ pub mod journal;
 pub mod keys;
 pub mod lease;
 pub mod manifest;
+pub mod metrics;
 pub mod partition;
 #[cfg(feature = "r2")]
 pub mod r2;
@@ -48,6 +49,7 @@ impl ObjectLsm {
 }
 
 pub use error::{Error, Result};
+pub use metrics::MetricsSnapshot;
 pub use partition::{ObjectLsmEntry, ObjectLsmIter, ObjectLsmPartition};
 pub use store::{MemoryStore, Store};
 

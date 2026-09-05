@@ -27,6 +27,7 @@ use crate::{
   },
   lease::{Lease, LeaseOptions, lease_key},
   manifest::Manifest,
+  metrics::{Metrics, MetricsSnapshot},
   partition::ObjectLsmPartition,
   segment::{
     BLOCK_HEADER_LEN, BlockMeta, SegmentEntries, SegmentIndex, SegmentMeta, TAIL_LEN,
@@ -59,6 +60,7 @@ pub struct Inner {
   /// Serializes follower snapshot refreshes so a slower loader can never
   /// overwrite a newer view with an older one.
   pub refresh_lock: parking_lot::Mutex<()>,
+  pub metrics: Metrics,
   /// Shared lease-lost flag used for best-effort write fencing; the lease
   /// object itself is owned by the `ObjectLsm` handle (not by `Inner`), so
   /// partition handles cannot prolong its lifetime.
@@ -198,6 +200,33 @@ impl ObjectLsm {
     self.inner.state.read().fence_epoch
   }
 
+  /// Snapshot of cumulative counters plus current storage state, for
+  /// production observability.
+  pub fn metrics(&self) -> MetricsSnapshot {
+    let mut m = self.inner.metrics.counters();
+    // Never hold the global state lock while taking partition locks: the
+    // engine lock order is partition -> state, so nesting them here would
+    // deadlock against a concurrent commit. The snapshot is point-in-time-ish.
+    {
+      let st = self.inner.state.read();
+      m.journal_count = st.journal_seqs.len();
+      m.journal_bytes = st.journal_sizes.values().copied().sum();
+    }
+    let mut segments = 0usize;
+    let mut segment_bytes = 0u64;
+    let mut memtable_bytes = 0u64;
+    for lock in self.inner.partitions.snapshot() {
+      let ps = lock.read();
+      segments += ps.meta.segments.len();
+      segment_bytes += ps.meta.segments.iter().map(|s| s.bytes).sum::<u64>();
+      memtable_bytes += ps.mem_bytes;
+    }
+    m.segments = segments;
+    m.segment_bytes = segment_bytes;
+    m.memtable_bytes = memtable_bytes;
+    m
+  }
+
   /// Open a read-only follower of `cfg.prefix` in `store`.
   ///
   /// A follower does NOT acquire the writer lease and never writes to the
@@ -238,6 +267,7 @@ impl ObjectLsm {
       lease_lost: parking_lot::Mutex::new(None),
       read_only: AtomicBool::new(true),
       refresh_lock: parking_lot::Mutex::new(()),
+      metrics: Metrics::default(),
     });
     if let Some(interval) = refresh
       && !interval.is_zero()
@@ -276,6 +306,7 @@ impl ObjectLsm {
       lease_lost: parking_lot::Mutex::new(None),
       read_only: AtomicBool::new(false),
       refresh_lock: parking_lot::Mutex::new(()),
+      metrics: Metrics::default(),
     });
     if cfg.journal_window_ms.is_some() {
       spawn_journal_flusher(inner.clone());
@@ -513,6 +544,7 @@ fn refresh_follower(inner: &Inner) -> Result<()> {
   if !inner.read_only.load(Ordering::SeqCst) {
     return Ok(());
   }
+  inner.metrics.bump_refresh();
   // Serialize snapshot loads+swaps (a manual refresh() and the background
   // poller share this), so a slow loader can never install an OLDER view over
   // a newer one that has already landed.
@@ -1414,6 +1446,7 @@ impl Inner {
       return Ok(());
     }
     self.ensure_writable()?;
+    self.metrics.bump_commit();
     let mut names: Vec<String> = ops.iter().map(|op| op.part.clone()).collect();
     names.sort();
     names.dedup();
@@ -1465,12 +1498,27 @@ impl Inner {
       // apply. The journal lock only serializes journal PUTs.
       {
         let _guard = self.journal_lock.lock();
-        self.store.put(&jkey, &bytes)?;
+        if let Err(e) = self.store.put(&jkey, &bytes) {
+          self.metrics.bump_commit_failure();
+          return Err(e);
+        }
       }
       let mut st = self.state.write();
       st.journal_seqs.insert(group.seq);
       st.journal_sizes.insert(group.seq, bytes.len() as u64);
     }
+
+    let mut put_ops = 0u64;
+    let mut delete_ops = 0u64;
+    for op in &group.ops {
+      if op.value.is_some() {
+        put_ops += 1;
+      } else {
+        delete_ops += 1;
+      }
+    }
+    self.metrics.bump_puts(put_ops);
+    self.metrics.bump_deletes(delete_ops);
 
     for op in &group.ops {
       let ps = guards.get_mut(&op.part).expect("partition guard");
@@ -1628,6 +1676,7 @@ impl Inner {
   /// Point lookup: memtable, then segments newest -> oldest using the block
   /// index to fetch only the candidate block.
   pub(crate) fn lookup(&self, name: &str, key: &[u8]) -> Result<Option<Vec<u8>>> {
+    self.metrics.bump_get();
     // Reader token prevents segment-object deletion while this lookup runs.
     let _gate = self.readers.enter();
     let prefix = self.state.read().cfg.prefix.clone();
