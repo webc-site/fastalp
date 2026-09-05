@@ -543,3 +543,47 @@ fn two_writers_share_bucket_with_cross_read_consistency() {
   let p_rb = rb.partition("data").unwrap();
   assert_eq!(p_rb.len().unwrap(), 25, "B's shard intact after reopen");
 }
+
+/// Exercises the follower's PARALLEL journal replay: the leader publishes a
+/// manifest and then leaves >512 strict-mode journals above the watermark, so
+/// a follower refresh must decode multiple waves through decode_journal_wave
+/// (not just the <16-object serial fast path).
+#[test]
+fn follower_parallel_replay_recovers_long_journal_tail() {
+  let s = MemoryStore::new();
+  let cfg = Config::new("fo/t12")
+    .max_memtable_bytes(1 << 30)
+    .max_segments_before_compact(1_000_000);
+  let leader = ObjectLsm::open(Arc::new(s.clone()), cfg.clone()).unwrap();
+  let p = leader.partition("data").unwrap();
+  for i in 0..5u32 {
+    p.insert(
+      format!("base-{i:02}").as_bytes(),
+      format!("v{i}").as_bytes(),
+    )
+    .unwrap();
+  }
+  leader.compact().unwrap(); // manifest watermark = 5
+
+  // 600 unflushed strict-mode journals above the watermark.
+  for i in 0..600u32 {
+    p.insert(
+      format!("tail-{i:04}").as_bytes(),
+      format!("v{i}").as_bytes(),
+    )
+    .unwrap();
+  }
+
+  let follower = ObjectLsm::open_follower(Arc::new(s.clone()), cfg.clone(), None).unwrap();
+  follower.refresh().unwrap();
+  let pf = follower.partition("data").unwrap();
+  assert_eq!(
+    pf.len().unwrap(),
+    605,
+    "follower recovers the full journal tail"
+  );
+  assert_eq!(pf.get(b"base-04").unwrap().unwrap(), b"v4");
+  assert_eq!(pf.get(b"tail-0000").unwrap().unwrap(), b"v0");
+  assert_eq!(pf.get(b"tail-0299").unwrap().unwrap(), b"v299");
+  assert_eq!(pf.get(b"tail-0599").unwrap().unwrap(), b"v599");
+}
