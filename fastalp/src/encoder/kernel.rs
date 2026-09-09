@@ -66,7 +66,7 @@ unsafe fn encode_fearless_f64_kernel<S: Simd>(
         let diff2 = d2.bitcast::<S::u64s>() ^ v2.bitcast::<S::u64s>();
         let diff3 = d3.bitcast::<S::u64s>() ^ v3.bitcast::<S::u64s>();
 
-        any_diff_v |= ((diff0 | diff1) | (diff2 | diff3));
+        any_diff_v |= diff0 | diff1 | diff2 | diff3;
 
         min_v0 = min_v0.min(r0);
         min_v1 = min_v1.min(r1);
@@ -243,7 +243,7 @@ unsafe fn encode_fearless_f32_kernel<S: Simd>(
         let diff2 = d2.bitcast::<S::u32s>() ^ v2.bitcast::<S::u32s>();
         let diff3 = d3.bitcast::<S::u32s>() ^ v3.bitcast::<S::u32s>();
 
-        any_diff_v |= ((diff0 | diff1) | (diff2 | diff3));
+        any_diff_v |= diff0 | diff1 | diff2 | diff3;
 
         min_v0 = min_v0.min(r0);
         min_v1 = min_v1.min(r1);

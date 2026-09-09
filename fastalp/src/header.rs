@@ -215,7 +215,7 @@ pub fn read_count(src: &[u8]) -> Result<usize> {
           available: src.len(),
         });
       }
-      let c = u32::from_le_bytes(src[1..5].try_into().map_err(|_| Error::InvalidHeader)?) as usize;
+      let c = u32::from_le_bytes([src[1], src[2], src[3], src[4]]) as usize;
       Ok(c)
     }
     // SAFETY: len_tag is 2 bits masked with 0x03, 0..=3 fully covered above
@@ -276,11 +276,12 @@ pub fn read_header(src: &[u8]) -> Result<ParsedHeader> {
           available: src.len(),
         });
       }
-      let c = u32::from_le_bytes(
-        src[cursor..cursor + 4]
-          .try_into()
-          .map_err(|_| Error::InvalidHeader)?,
-      ) as usize;
+      let c = u32::from_le_bytes([
+        src[cursor],
+        src[cursor + 1],
+        src[cursor + 2],
+        src[cursor + 3],
+      ]) as usize;
       cursor += 4;
       c
     }

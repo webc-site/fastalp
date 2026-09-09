@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use core::mem::size_of;
 
 /// Bits per byte constant.
 /// 每字节比特数常量

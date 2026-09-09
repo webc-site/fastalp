@@ -54,15 +54,12 @@ use crate::{
 #[inline(always)]
 fn count_bitmap_ones(bitmap: &[u8], count: usize) -> usize {
   let full_bytes = count / 8;
-  let full_words = full_bytes / 8;
+  let (words, rem) = bitmap[..full_bytes].as_chunks::<8>();
   let mut ones = 0usize;
-  let ptr = bitmap.as_ptr().cast::<u64>();
-  for i in 0..full_words {
-    // SAFETY: bitmap has (count + 7) / 8 bytes, which has at least full_words * 8 bytes
-    let word = unsafe { ptr.add(i).read_unaligned() };
-    ones += word.count_ones() as usize;
+  for chunk in words {
+    ones += u64::from_ne_bytes(*chunk).count_ones() as usize;
   }
-  for &b in &bitmap[full_words * 8..full_bytes] {
+  for &b in rem {
     ones += b.count_ones() as usize;
   }
   let rem_bits = count % 8;
@@ -576,6 +573,9 @@ pub unsafe fn decompress_into_raw<F: AlpFloat>(
     });
   }
   let bitmap = &src[cursor..cursor + bitmap_len];
+  if (bitmap[0] & 1) != 0 {
+    return Err(Error::InvalidHeader);
+  }
   cursor += bitmap_len;
 
   let repeats = count_bitmap_ones(bitmap, count);
@@ -664,11 +664,12 @@ pub(crate) unsafe fn patch_exceptions<F: AlpFloat>(
         available: src.len(),
       });
     }
-    let c = u32::from_le_bytes(
-      src[cursor..cursor + 4]
-        .try_into()
-        .map_err(|_| Error::InvalidHeader)?,
-    ) as usize;
+    let c = u32::from_le_bytes([
+      src[cursor],
+      src[cursor + 1],
+      src[cursor + 2],
+      src[cursor + 3],
+    ]) as usize;
     (c, EXC_COUNT_LEN_U32)
   } else {
     if src.len() < cursor + EXC_COUNT_LEN {
