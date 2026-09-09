@@ -1,0 +1,58 @@
+name: Benchmark & Regression Tracking
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Performance Regression Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run benchmarks
+        run: |
+          cargo bench --package fastalp --bench bench -- --sample-count 10 | tee bench_raw.txt
+
+      - name: Parse benchmark results and generate summary
+        run: |
+          node scripts/bench_summary.js bench_raw.txt bench_output.json bench_summary.md
+          cat bench_summary.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Store and track benchmark trend
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: FastALP Microbenchmarks
+          tool: 'customSmallerIsBetter'
+          output-file-path: bench_output.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: ${{ github.ref == 'refs/heads/main' }}
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench
+          alert-threshold: '130%'
+          comment-on-alert: true
+          fail-on-alert: false
+          alert-comment-cc-users: '@${{ github.actor }}'
+          summary-always: true
