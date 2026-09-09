@@ -5,6 +5,8 @@
 <a href="https://bsky.app/profile/webc-site.bsky.social"><img src="https://img.shields.io/badge/Bluesky-@webc--site-0285FF?logo=bluesky&logoColor=white" height="28"></a>
 <a href="https://crates.io/crates/fastalp"><img src="https://img.shields.io/crates/v/fastalp.svg" height="28"></a>
 <a href="https://docs.rs/fastalp"><img src="https://docs.rs/fastalp/badge.svg" height="28"></a>
+<a href="https://github.com/webc-site/fastalp/actions/workflows/ci.yml"><img src="https://github.com/webc-site/fastalp/actions/workflows/ci.yml/badge.svg" height="28"></a>
+<a href="https://webc-site.github.io/fastalp/dev/bench/"><img src="https://img.shields.io/badge/Continuous-Benchmark-blue?logo=github-actions&logoColor=white" height="28"></a>
 
 ---
 
