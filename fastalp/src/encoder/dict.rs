@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use core::mem::size_of;
 
 use crate::{
   bitpack::{bitpack_u64, packed_byte_size},

@@ -167,7 +167,7 @@ impl<F: AlpFloat> Encoder<F> {
         }
       }
       unsafe {
-        ptr_u64.add(w).write_unaligned(word);
+        ptr_u64.add(w).write_unaligned(word.to_le());
       }
     }
 

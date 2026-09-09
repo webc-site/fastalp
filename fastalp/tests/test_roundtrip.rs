@@ -851,3 +851,28 @@ fn test_rd_mode_f32_roundtrip() -> fastalp::Result<()> {
 
   Ok(())
 }
+
+#[test]
+fn test_corrupted_repeat_bitmap_rejected() {
+  use fastalp::{
+    Error, compress, decompress,
+    header::{FLAG_REPEAT, read_header},
+  };
+
+  // 构造带有 FLAG_REPEAT 的合法压缩数据
+  let data = vec![1.234f64; 64];
+  let mut comp = compress(&data);
+
+  // 确保测试数据包含 repeat 标志
+  if (comp[0] & FLAG_REPEAT) != 0 {
+    // 篡改 repeat bitmap 的第 0 位为 1（非法状态，首元素不能是重复元素）
+    // 头部为 1B desc + 1B count + 2B params = 4B，随后紧随 bitmap
+    let hdr = read_header(&comp).unwrap();
+    comp[hdr.cursor] |= 1;
+    let res: fastalp::Result<Vec<f64>> = decompress(&comp);
+    assert!(
+      matches!(res, Err(Error::InvalidHeader)),
+      "首位为 1 的恶意或损坏 repeat bitmap 必须被严格拦截并返回 InvalidHeader"
+    );
+  }
+}
