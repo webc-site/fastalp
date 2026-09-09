@@ -1,0 +1,11 @@
+{
+  "type": "module",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@1-/mdt": "^0.1.9",
+    "@3-/cargo_upgrade": "^0.1.4",
+    "husky": "^9.1.7"
+  }
+}

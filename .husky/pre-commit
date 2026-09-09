@@ -1,0 +1,4 @@
+set -x
+cargo +nightly fmt --check || true
+command -v codegraph >/dev/null 2>&1 && codegraph sync || true
+git add -u || true
