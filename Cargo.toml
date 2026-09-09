@@ -1,13 +1,11 @@
 [workspace]
 resolver = "3"
-members = []
+members = ["fastalp"]
 
 [workspace.package]
-version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
-repository = ""
-homepage = ""
+repository = "https://github.com/webc-site/fastalp#readme"
 
 [profile.release]
 opt-level = 3

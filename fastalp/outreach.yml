@@ -1,0 +1,425 @@
+records:
+  - type: pull_request
+    repo: rust-unofficial/awesome-rust
+    pr_number: 2763
+    url: https://github.com/rust-unofficial/awesome-rust/pull/2763
+    title: Add fastalp under Compression section
+    status: closed
+    date: 2026-09-03
+
+  - type: pull_request
+    repo: build-workbench/awesome-compression
+    pr_number: 2
+    url: https://github.com/build-workbench/awesome-compression/pull/2
+    title: "添加 fastalp（自适应无损浮点压缩算法）到 Rust 算法库"
+    status: submitted
+    date: 2026-09-03
+
+  - type: pull_request
+    repo: rustcc/awesome-rust
+    pr_number: 10
+    url: https://github.com/rustcc/awesome-rust/pull/10
+    title: "添加 fastalp（自适应无损浮点压缩算法库）到压缩章节"
+    status: submitted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: lance-format/lance
+    issue: 4062
+    url: https://github.com/lance-format/lance/issues/4062#issuecomment-5516657570
+    title: Add ALP compression
+    status: posted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: vortex-data/vortex
+    issue: 919
+    url: https://github.com/vortex-data/vortex/issues/919#issuecomment-5516659005
+    title: ALP exponent sampling improvements
+    status: posted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: apache/arrow-rs
+    issue: 10646
+    url: https://github.com/apache/arrow-rs/issues/10646#issuecomment-5516664838
+    title: "[Parquet] Validate the ALP sampling heuristic"
+    status: posted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: pola-rs/polars
+    issue: 28870
+    url: https://github.com/pola-rs/polars/issues/28870#issuecomment-5516666054
+    title: Add support for parquet ALP encoding
+    status: posted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: ekiwi/wellen
+    issue: 11
+    url: https://github.com/ekiwi/wellen/issues/11#issuecomment-5516701773
+    title: "wavemem: look into compression for reals"
+    status: posted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: codyaverett/tiny-rust
+    issue: 163
+    url: https://github.com/codyaverett/tiny-rust/issues/163#issuecomment-5516703943
+    title: "tiny-tsdb: Time-Series DB with Gorilla Compression"
+    status: posted
+    date: 2026-09-03
+
+  - type: discussion_comment
+    repo: xerj-org/xerj
+    discussion: 148
+    url: https://github.com/xerj-org/xerj/discussions/148#discussioncomment-18257764
+    title: "RFC: per-field / per-type storage compression"
+    status: posted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: strawgate/o11ykit
+    issue: 80
+    url: https://github.com/strawgate/o11ykit/issues/80#issuecomment-5516854481
+    title: "perf(o11ytsdb): counter delta-before-ALP differential encoding"
+    status: posted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: cmcuza/TerseTS
+    issue: 29
+    url: https://github.com/cmcuza/TerseTS/issues/29#issuecomment-5516865251
+    title: "Implement ALP"
+    status: posted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: apache/parquet-format
+    issue: 401
+    url: https://github.com/apache/parquet-format/issues/401#issuecomment-5516875195
+    title: "Support gorilla encoding for float numbers"
+    status: posted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: timescale/timescaledb
+    issue: 2529
+    url: https://github.com/timescale/timescaledb/issues/2529#issuecomment-5516889507
+    title: "Compression improvements using lossy techniques"
+    status: posted
+    date: 2026-09-03
+
+  - type: issue
+    repo: Muvon/pulsora
+    issue: 7
+    url: https://github.com/Muvon/pulsora/issues/7
+    title: "Feature request: Support fastalp encoding for market price floating-point columns"
+    status: submitted
+    date: 2026-09-03
+
+  - type: issue
+    repo: jocarrd/graupel
+    issue: 7
+    url: https://github.com/jocarrd/graupel/issues/7
+    title: "Support fastalp (Adaptive Lossless Floating-Point) codec"
+    status: submitted
+    date: 2026-09-03
+
+  - type: pull_request
+    repo: jocarrd/graupel
+    pr_number: 8
+    url: https://github.com/jocarrd/graupel/pull/8
+    title: "feat(codec): add fastalp (Adaptive Lossless Floating-Point) compression codec"
+    status: submitted
+    date: 2026-09-03
+
+  - type: pull_request
+    repo: awesome-rust-com/awesome-rust
+    pr_number: 108
+    url: https://github.com/awesome-rust-com/awesome-rust/pull/108
+    title: Add fastalp under Compression section
+    status: merged
+    date: 2026-09-03
+
+  - type: pull_request
+    repo: getsentry/bucket-compression
+    pr_number: 2
+    url: https://github.com/getsentry/bucket-compression/pull/2
+    title: "feat(algo): add fastalp floating-point compression benchmark"
+    status: submitted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: Entropack/alp-rs
+    issue: 1
+    url: https://github.com/Entropack/alp-rs/issues/1#issuecomment-5518175483
+    title: "Feature Request: `compress_into` and `decompress_into`"
+    status: posted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: Entropack/alp-rs
+    issue: 2
+    url: https://github.com/Entropack/alp-rs/issues/2#issuecomment-5518176249
+    title: "Feature Request: Cascade `DELTA` - `FFOR`"
+    status: posted
+    date: 2026-09-03
+
+  - type: pull_request
+    repo: vignesh2027/-FLUXDB
+    pr_number: 1
+    url: https://github.com/vignesh2027/-FLUXDB/pull/1
+    title: "feat(compression): add fastalp floating-point codec for decimal metrics and market prices"
+    status: submitted
+    date: 2026-09-03
+
+  - type: issue_comment
+    repo: quickwit-oss/tantivy
+    issue: 2114
+    url: https://github.com/quickwit-oss/tantivy/issues/2114#issuecomment-5518268213
+    title: "Support f64 Compression"
+    status: posted
+    date: 2026-09-03
+
+  - type: issue
+    repo: cnosdb/cnosdb
+    issue: 2437
+    url: https://github.com/cnosdb/cnosdb/issues/2437
+    title: "[Feature] Support fastalp (Adaptive Lossless Floating-Point) column codec for decimal metrics and market data"
+    status: submitted
+    date: 2026-09-03
+
+  - type: issue
+    repo: spiraldb/alp
+    issue: 115
+    url: https://github.com/spiraldb/alp/issues/115
+    title: "Sharing benchmark observations on decimal reconstruction and exception rates from fastalp"
+    status: submitted
+    date: 2026-09-03
+
+  - type: issue_submission
+    repo: 521xueweihan/HelloGitHub
+    issue: 3633
+    url: https://github.com/521xueweihan/HelloGitHub/issues/3633
+    title: "[开源推荐] fastalp：最快的通用时序浮点压缩、解压"
+    status: submitted
+    date: 2026-09-03
+
+  - type: issue_submission
+    repo: ruanyf/weekly
+    issue: 11487
+    url: https://github.com/ruanyf/wekly/issues/11487
+    title: "【开源自荐】fastalp：最快的通用时序浮点压缩、解压"
+    status: submitted
+    date: 2026-09-03
+
+  - type: issue_submission
+    repo: rustcn-org/rust-weekly
+    issue: 13
+    url: https://github.com/rustcn-org/rust-weekly/issues/13
+    title: "推荐项目：fastalp —— 最快的通用时序浮点压缩、解压"
+    status: submitted
+    date: 2026-09-03
+
+  - type: issue_submission
+    repo: OpenGithubs/weekly
+    issue: 147
+    url: https://github.com/OpenGithubs/weekly/issues/147
+    title: "【开源自荐】fastalp：最快的通用时序浮点压缩、解压"
+    status: submitted
+    date: 2026-09-03
+
+  - type: discussion
+    repo: openGemini/openGemini
+    discussion: 968
+    url: https://github.com/openGemini/openGemini/discussions/968
+    title: "Exploring decimal float compression for time-series: comparing integer mapping (fastalp) with mantissa erasing (MLF)"
+    status: posted
+    date: 2026-09-04
+
+  - type: pull_request
+    repo: bootreer/chimp
+    pr_number: 2
+    url: https://github.com/bootreer/chimp/pull/2
+    title: "feat(bench): add fastalp floating-point compression benchmark"
+    status: submitted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: ClickHouse/ClickHouse
+    discussion: 117970
+    url: https://github.com/ClickHouse/ClickHouse/discussions/117970
+    title: "Sharing benchmark observations on decimal floating-point compression: comparing integer mapping with Gorilla/Chimp on time-series datasets"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: GreptimeTeam/greptimedb
+    discussion: 9019
+    url: https://github.com/orgs/GreptimeTeam/discussions/9019
+    title: "Exploring decimal floating-point compression for Rust time-series storage: benchmarks and observations from fastalp"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: duckdb/duckdb
+    discussion: 25342
+    url: https://github.com/duckdb/duckdb/discussions/25342
+    title: "Sharing benchmark observations on decimal floating-point compression: comparing integer mapping with Gorilla/Chimp on time-series datasets"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: questdb/questdb
+    discussion: 7598
+    url: https://github.com/questdb/questdb/discussions/7598
+    title: "Sharing benchmark observations on decimal floating-point compression for time-series columns: comparing integer mapping with Gorilla/Chimp"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: influxdata/influxdb
+    discussion: 27615
+    url: https://github.com/influxdata/influxdb/discussions/27615
+    title: "Sharing benchmark observations on decimal floating-point compression: comparing integer mapping with Gorilla/Chimp on time-series datasets"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: prometheus/prometheus
+    discussion: 19576
+    url: https://github.com/prometheus/prometheus/discussions/19576
+    title: "Sharing benchmark observations on floating-point time-series compression: comparing integer mapping with Gorilla XOR on metrics datasets"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: apache/datafusion
+    discussion: 24935
+    url: https://github.com/apache/datafusion/discussions/24935
+    title: "Sharing benchmark observations on decimal floating-point compression: comparing integer mapping with Gorilla/Chimp on time-series datasets"
+    status: posted
+    date: 2026-09-04
+
+  - type: pull_request
+    repo: praveen-influx/alp-test
+    pr_number: 1
+    url: https://github.com/praveen-influx/alp-test/pull/1
+    title: "feat(bench): add fastalp floating-point compression benchmark"
+    status: submitted
+    date: 2026-09-04
+
+  - type: pull_request
+    repo: cwida/ALP
+    pr_number: 46
+    url: https://github.com/cwida/ALP/pull/46
+    title: "docs: add fastalp to list of systems using and implementing ALP"
+    status: closed
+    date: 2026-09-04
+
+  - type: pull_request
+    repo: cwida/ALP
+    pr_number: 47
+    url: https://github.com/cwida/ALP/pull/47
+    title: "feat(bench): integrate fastalp Rust benchmark runner and comparison target"
+    status: closed
+    date: 2026-09-04
+
+  - type: pull_request
+    repo: cwida/ALP
+    pr_number: 48
+    url: https://github.com/cwida/ALP/pull/48
+    title: "feat(bench): integrate fastalp v0.1.31 benchmark and expand 37 test datasets"
+    status: submitted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: taosdata/TDengine
+    discussion: 35456
+    url: https://github.com/taosdata/TDengine/discussions/35456
+    title: "Sharing benchmark observations on decimal floating-point compression in industrial time-series: comparing integer mapping with Gorilla/Chimp"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: apache/iotdb
+    discussion: 18581
+    url: https://github.com/apache/iotdb/discussions/18581
+    title: "Sharing benchmark observations on decimal floating-point compression in IoT time-series: comparing integer mapping with Gorilla/Chimp"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: risingwavelabs/risingwave
+    discussion: 26936
+    url: https://github.com/orgs/risingwavelabs/discussions/26936
+    title: "Exploring fast decimal floating-point compression in Rust: benchmark observations and SIMD throughput from fastalp"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: databendlabs/databend
+    discussion: 20437
+    url: https://github.com/databendlabs/databend/discussions/20437
+    title: "Sharing benchmark observations on decimal floating-point compression in columnar analytics: comparing integer mapping with Gorilla/Chimp"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: facebookincubator/velox
+    discussion: 18840
+    url: https://github.com/facebookincubator/velox/discussions/18840
+    title: "Sharing benchmark observations on decimal floating-point compression for columnar vectors: comparing integer mapping with Gorilla/Chimp"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: timeplus-io/proton
+    discussion: 1220
+    url: https://github.com/timeplus-io/proton/discussions/1220
+    title: "Sharing benchmark observations on decimal floating-point compression in streaming time-series: comparing integer mapping with Gorilla/Chimp"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: paradedb/paradedb
+    discussion: 6204
+    url: https://github.com/orgs/paradedb/discussions/6204
+    title: "Sharing benchmark observations on decimal floating-point compression in columnar analytics: comparing integer mapping with Gorilla/Chimp"
+    status: posted
+    date: 2026-09-04
+
+  - type: discussion
+    repo: apache/doris
+    discussion: 67516
+    url: https://github.com/apache/doris/discussions/67516
+    title: "Sharing benchmark observations on decimal floating-point compression in columnar analytics: comparing integer mapping with Gorilla/Chimp"
+    status: posted
+    date: 2026-09-04
+
+  - type: pull_request
+    repo: cnosdb/docs
+    pr_number: 364
+    url: https://github.com/cnosdb/docs/pull/364
+    title: "docs: add ALP and fastalp floating-point compression to concept design"
+    status: closed
+    date: 2026-09-04
+
+  - type: pull_request
+    repo: cnosdb/cnosdb
+    pr_number: 2438
+    url: https://github.com/cnosdb/cnosdb/pull/2438
+    title: "feat(codec): add fastalp floating-point compression codec"
+    status: submitted
+    date: 2026-09-04
+
+  - type: pull_request
+    repo: aidlx/tsink
+    pr_number: 18
+    url: https://github.com/aidlx/tsink/pull/18
+    title: "feat(engine): add adaptive fastalp lossless floating-point compression codec"
+    status: submitted
+    date: 2026-09-04
+

@@ -1,0 +1,88 @@
+## Changelog
+
+### v0.1.42
+
+- **Standalone Repository Migration & Workspace Standardization**:<br>
+  Migrated to standalone repository `webc-site/fastalp`; standardized package metadata, documentation templates, and community links; unified workspace configurations.
+
+### v0.1.40
+
+- **Bit-Unpacking Architectural Decoupling & Fused Single-Pass Consumer**:
+  Refactored the monolithic bit-unpacking engine into modular subcomponents: `consumer.rs`, `decoder.rs`, `kernel.rs`, and safe top-level dispatchers. Abstracted the `AlpConsumer` pipeline paradigm, fusing Delta first-order difference prefix sums and floating-point reconstruction directly in CPU registers, eliminating 8KB intermediate stack buffers and double iterations.
+- **Instruction Pipeline Wide Loads & Loop Accelerations**:
+  Replaced branch-heavy element-by-element loops and slice reads in `unpack_2`, `unpack_4`, and `unpack_16` with single-instruction `u16`, `u32`, and `u128` wide loads and pure bitshift extractions; vectorized 0-bit constant block filling via 8-way unrolling (`write_8!`) in `consume_zeros`; decoupled the running accumulator in `AlpDeltaConsumer`, cutting cycle dependency latency from 2 cycles down to 1 cycle.
+- **Global Unrolling & Dispatch Macro Framework**:
+  Introduced `src/macros.rs` (`arr_8!`, `unroll_8!`, `write_8!`, `write_4!`, `match_pack_23!`), collapsing 23-arm packing match boilerplate and pre-binding pointers to eliminate duplicate expression evaluations and remove 120+ lines of redundant code.
+- **Uninitialized Memory Soundness & Zero Clippy Warnings**:
+  Adopted raw pointer reservation and in-place writes in `decompress_into`, `bitunpack_u64_raw`, and `expand_repeats`, strictly eliminating undefined behavior (UB) from constructing uninitialized slice references; cleaned up all absolute path references to achieve zero warnings under `-W clippy::absolute_paths`.
+
+### v0.1.38
+
+- **Dead Code Elimination & Bitpack Core Cleanup**:
+  Removed deprecated legacy routines `bitunpack_core` and `bitunpack_core_div` from `bitpack/unpack.rs`, consolidating all bit-unpacking pathways on the generic dispatch kernels; cleaned up unused imports and `#[allow(unused_imports)]` attributes in `bitpack/mod.rs`.
+- **Absolute Path Linting & Full Clippy Compliance**:
+  Resolved `-W clippy::absolute_paths` warnings in `capi.rs` and `decoder/standard.rs`, ensuring 100% zero-warning compliance across all compilation profiles and optional feature sets.
+- **Documentation Badges & Social Links**:
+  Unified README badge heights to 28px across language switchers and ecosystem shields; introduced the official Bluesky badge (`@webc-site`) alongside Twitter; updated benchmark visualizations and C-API integration snippets to v0.1.38.
+
+### v0.1.37
+
+- **Zero-Cost Decoder Trait & Architectural Deduplication**:
+  Abstracted the `AlpDecoder<F>` core trait with monomorphized implementations (`AlpFac1Decoder`, `AlpMulDecoder`, `AlpDivDecoder`); introduced the `dispatch_decoder!` compile-time dispatch macro to eliminate runtime branch overhead in batch loops; unified generic bit-unpacking and dequantization kernels (`bitunpack_core_generic`), eliminating 800+ lines of duplicated code.
+- **End-to-End Compression Ratio Leap (+11.2%)**:
+  Across all 37 public and industrial time-series datasets, total compressed size dropped from 104,465 B to 93,909 B, saving 10,556 bytes (a 10.1% size reduction and +11.2% ratio improvement); relaxed Delta evaluation threshold (`>= 4`) unlocks smooth time-series data pathways with ratios up to 431x; introduced monotonic descending outlier pruning and predecessor smoothing to release the full benefits of differential encoding.
+- **Decompression Throughput Boost (+14.7%)**:
+  Decompression throughput climbed from 28.36 GB/s to 32.53 GB/s (+14.7% improvement) on modern architectures, while maintaining high-speed end-to-end encoding throughput at 4.87 GB/s.
+- **100% Bilingual Code Comments & Production Engineering Quality**:
+  Implemented complete Chinese/English bilingual comments across all core modules (sampler, bitunpack, encoder engine, standard/delta decoders, C-API); magic numbers replaced with compile-time constants; passed clippy with zero warnings; 100% pass rate across 355 unit and bit-exact lossless roundtrip tests.
+
+### v0.1.36
+
+- **Rigorous Academic Benchmark Alignment with C++ ALP**:
+  Conducted side-by-side evaluation across all 37 public and industrial time-series datasets against the official C++ ALP implementation (ACM SIGMOD 2024), standardizing academic citation formatting and linking exact source code benchmark lines ([`bench_alp_encode.cpp#L88-L95`](https://github.com/cwida/ALP/blob/main/publication/source_code/bench_speed/bench_alp_encode.cpp#L88-L95)).
+- **Dual-Metric Throughput Calibration**:
+  Calibrated pure encoding kernel throughput (skipping sampling exploration) at 6.0 GB/s, achieving a 1.10x speedup over official C++ ALP (5.5 GB/s); end-to-end sampled compression throughput reaches 3.7 GB/s (4.6x faster than C++ ALP's 0.80 GB/s); decompression throughput reaches 27.0 GB/s (1.35x faster than C++ ALP's 20.0 GB/s); geometric mean compression ratio reaches 6.99x (18% higher than C++ ALP's 5.93x).
+- **100% Reproducible Open-Source Evaluation Suite**:
+  Provided one-click reproduction scripts and expanded 37-dataset benchmark suites in the evaluation fork repository ([`github.com/x-at-01/ALP`](https://github.com/x-at-01/ALP)).
+
+### v0.1.35
+
+- **Raw Pointer Decompression Kernel & Soundness Guarantee**:
+  Introduced `decompress_into_raw`, `decode_standard_raw`, and `decode_delta_raw` to write directly into target raw pointers, avoiding constructing slice references over uninitialized memory; seamlessly supports uninitialized buffers from C callers via C-API.
+- **Single-Pass Exception Patching**:
+  Refactored `patch_exceptions` using `chunks_exact` to eliminate repeated slice recalculation and bounds checks in the inner loop.
+- **Dead Code Elimination & Hardware-Accelerated Rounding**:
+  Removed legacy `MAGIC_NUMBER` simulation constants, adopting `round_ties_even()` with direct mapping to SSE4.1/AVX and ARM64 instructions, ensuring 100% bit-exact lossless roundtrip.
+
+### v0.1.34
+
+- **Strict Code Standards & Zero Compiler Warnings**:
+  Completely eliminated all `#[allow(...)]` attributes across the entire codebase (`src/`), addressing all Clippy warnings and dead code to enforce strict code quality.
+
+- **Struct Encapsulation & Architectural Decoupling**:
+  Encapsulated compression parameters (exponent, factor, exception threshold, bit-width, etc.) into `AlpParams`, eliminating raw tuple arguments. Encapsulated `AlpHeader` decoder to remove scattered magic numbers and manual bit offsets.
+
+- **Bitpack Kernel Refactoring & Code Reuse**:
+  Abstracted and unified the 8-element loop packing kernel `pack_chunk_8`, removing duplicated loop unrolls. Streamlined the Delta first-order difference decoder with tree-reduction to eliminate scalar dependency chains and improve instruction-level parallelism (ILP).
+
+- **Accurate Benchmark Calibration & Branch Isolation**:
+  Refined C++ ALP benchmark metrics extraction, clearly distinguishing between sampled compression throughput (~0.85 GB/s) and raw kernel throughput (~5.9 GB/s), while accurately recording decompression throughput (~20.3 GB/s). Decoupled the official PR branch from self-use evaluation branches.
+
+- **Documentation Architecture Restructuring**:
+  Reorganized documentation into dedicated `readme/zh/` and `readme/en/` directories with integrated version changelogs and automatic multilingual README aggregation.
+
+### v0.1.33
+
+- Code architecture optimization and performance fine-tuning.
+
+### v0.1.32
+
+- Refined stateful `Encoder` documentation and buffer reuse API ergonomics.
+
+### v0.1.31
+
+- Added optional `capi` feature with bilingual C-API documentation and header files for cross-language (C/C++/Python) integration.
+
+### v0.1.30
+
+- Clarified standard ALP baseline vs custom compression ratio optimizations; enhanced floating-point precision stability.

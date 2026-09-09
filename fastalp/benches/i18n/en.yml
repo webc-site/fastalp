@@ -1,0 +1,95 @@
+title: "fastalp Floating-Point Compression Benchmark"
+subtitle: "Comprehensive Side-by-Side Benchmark: Throughput, Compression Ratios & Scenarios"
+env_title: "Benchmark Environment"
+env_badge_title: "HARDWARE & RUNTIME ENVIRONMENT"
+
+hero_alt: "fastalp Floating-Point Compression Performance & Ratio Benchmark"
+
+card1_title: "Peak Decode Speed"
+card1_val: "{val}"
+card1_sub: "{val} vs C++ ALP (steady heartbeat)"
+
+card2_title: "Ramp Waveform Ratio"
+card2_val: "{val}"
+card2_sub: "Delta-ALP, {val} vs C++ ALP"
+
+card3_title: "Comprehensive Avg Decode"
+card3_val: "{val}"
+card3_sub: "Geometric mean solidly leads mainstream codecs"
+
+card4_title: "Comprehensive Avg Ratio"
+card4_val: "{val}"
+card4_sub: "{val} higher compression ratio vs C++ ALP"
+
+sec1_title: "Overall Compression Benchmark (8 Codecs)"
+sec1_sub: "Benchmarked on all 37 public datasets & industrial scenarios (Geometric Mean)"
+
+dual_title: "Advanced Throughput: Pure Kernel & Streaming Cache"
+dual_sub: "Benchmarking paper pure kernel (no sampling) and streaming state reuse"
+
+dual_card1_title: "Pure Encoding Kernel"
+dual_card1_tag: "No Sampling"
+dual_card1_desc: "Integer mapping & bitpack, skipping sampling"
+dual_card1_cpp: "Official C++ paper test-code: {val} GB/s"
+
+dual_card2_title: "Streaming Parameter Cache"
+dual_card2_tag: "State Reuse"
+dual_card2_desc: "Reuses model parameters across blocks"
+dual_card2_cpp: "Steady-state stream with hot L1D cache"
+
+sec2_title: "Scenario Breakdown"
+sec2_sub: "Covering all 37 datasets across IoT, Finance, Geospatial, Healthcare, Civic & Waveforms"
+
+legend_dec_speed: "Decode Speed (GB/s)"
+legend_enc_speed: "Encode Speed (GB/s)"
+
+col_algo: "Algorithm"
+col_type: "Type"
+col_dec: "Decode (GeoMean)"
+col_dec_vs: "Decode vs Base"
+col_enc: "Encode (GeoMean)"
+col_enc_vs: "Encode vs Base"
+col_ratio: "Ratio (GeoMean)"
+
+badge_leader: "LEADER"
+baseline_text: "Baseline"
+
+type_specialized: "Float Comp"
+type_general: "General Bytes"
+
+scene_sensor_title: "Decimal Environmental & Hydrology IoT"
+scene_sensor_sub: "Source: NEON Network / Meteoblue / CWI Hydrology"
+scene_sensor_badge: "11 Series · 11,264 pts"
+
+scene_finance_title: "High-Frequency Quantitative Trades"
+scene_finance_sub: "Source: Nasdaq / LSE / DAX / Zenodo / FAO"
+scene_finance_badge: "7 Series · 7,168 pts"
+
+scene_geo_title: "Geospatial Mapping & GPS Trajectories"
+scene_geo_sub: "Source: Avian Telemetry / Kaggle POI / NYC Taxi"
+scene_geo_badge: "5 Series · 5,120 pts"
+
+scene_health_title: "Healthcare Billing & Prescription Claims"
+scene_health_sub: "Source: CMS Inpatient Claims / US Pharma Pricing"
+scene_health_badge: "5 Series · 5,120 pts"
+
+scene_macro_title: "Civic Demographics & Macroeconomics"
+scene_macro_sub: "Source: Fiscal Transfers / Demographics / Macro Index"
+scene_macro_badge: "6 Series · 6,144 pts"
+
+scene_waveform_title: "Physical Waveforms & Steady Monitors"
+scene_waveform_sub: "Source: Industrial PID Ramp / SSD I/O / Steady Flow"
+scene_waveform_badge: "3 Series · 3,072 pts"
+
+sc_col_algo: "Algorithm"
+sc_col_dec: "Decompress"
+sc_col_enc: "Compress"
+sc_col_ratio: "Ratio"
+
+footer_lines:
+  - "Note: Overall decode/encode throughput and compression ratios are calculated using"
+  - "Geometric Mean across all 37 public benchmarks and typical industrial scenarios."
+  - "Measured directly on {cpu} with C++ ALP Fork (github.com/x-at-01/ALP) end-to-end."
+  - "Exact IEEE 754 bitwise lossless floating-point precision guaranteed."
+footer_left: "Note: Overall throughput and compression ratios use Geometric Mean across 37 benchmarks. Measured on {cpu} with C++ ALP Fork."
+footer_right: "Open-source fastalp @ crates.io/crates/fastalp"

@@ -1,0 +1,53 @@
+[package]
+name = "fastalp"
+version = "0.1.42"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/fastalp"
+description = "World's fastest and highest-ratio lossless floating-point compression / 全球最快、压缩比最高的通用时序浮点无损压缩"
+keywords = ["compression", "floating-point", "lossless", "alp", "time-series"]
+categories = [
+  "compression",
+  "algorithms",
+  "data-structures",
+  "encoding",
+  "database-implementations",
+]
+
+[features]
+default = []
+capi = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(docsrs)"] }
+
+[lib]
+crate-type = ["rlib", "staticlib", "cdylib"]
+
+[dependencies]
+fearless_simd = "0.7.0"
+thiserror = "2.0.20"
+
+[dev-dependencies]
+anyhow = "1.0.104"
+aok = "0.1.18"
+ctor = "1.0.13"
+divan = "0.1.21"
+fastrand = "2.5.0"
+graupel = "0.1.0"
+log = "0.4.34"
+log_init = "0.1.39"
+lz4_flex = "0.14.0"
+mimalloc = "0.1.52"
+pco = "1.0.3"
+snap = "1.1.2"
+zstd = "0.14.0"
+
+[[bench]]
+name = "bench"
+harness = false
