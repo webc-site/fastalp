@@ -1,48 +1,55 @@
-import { getSystemEnv, computeScenarioMetrics } from "./data.js";
+import { systemEnvByLang, computeScenarioMetrics, algoDictByLi } from "./data.js";
 
-export const renderMd = (benchData, lang = "zh") => {
-  const isZh = lang === "zh",
-    sys_env = getSystemEnv(isZh);
-  const { algorithms } = benchData;
+const metricsByAlgo = (algo) => {
+  const p = algo.paper_31;
+  return {
+    dec_geo: p.geomean_dec_gb_s,
+    dec_avg: p.avg_dec_gb_s,
+    enc_geo: p.geomean_enc_gb_s,
+    enc_avg: p.avg_enc_gb_s,
+    kern_geo: p.geomean_enc_kernel_gb_s,
+    kern_avg: p.avg_enc_kernel_gb_s,
+    ratio_geo: p.geomean_ratio,
+    ratio_total: p.total_raw_bytes / p.total_compressed_bytes,
+  };
+};
 
-  const fastalp = algorithms.find((a) => a.algorithm === "fastalp") || algorithms[0];
-  const cppAlp = algorithms.find((a) => a.algorithm === "cpp_alp") || algorithms[1];
-  const pco = algorithms.find((a) => a.algorithm === "pco");
-  const zstd = algorithms.find((a) => a.algorithm === "zstd");
-  const lz4 = algorithms.find((a) => a.algorithm === "lz4");
-  const snappy = algorithms.find((a) => a.algorithm === "snappy");
-  const chimp = algorithms.find((a) => a.algorithm === "chimp128");
-  const gorilla = algorithms.find((a) => a.algorithm === "gorilla");
-
-  // Metrics for fastalp dynamically read from JSON
-  const faDecGeo = fastalp.paper_31.geomean_dec_gb_s;
-  const faDecAvg = fastalp.paper_31.avg_dec_gb_s;
-  const faEncGeo = fastalp.paper_31.geomean_enc_gb_s;
-  const faEncAvg = fastalp.paper_31.avg_enc_gb_s;
-  const faKernGeo = fastalp.paper_31.geomean_enc_kernel_gb_s;
-  const faKernAvg = fastalp.paper_31.avg_enc_kernel_gb_s;
-  const faRatioGeo = fastalp.paper_31.geomean_ratio;
-  const faRatioTotal = fastalp.paper_31.total_raw_bytes / fastalp.paper_31.total_compressed_bytes;
-
-  // Metrics for C++ ALP dynamically read from JSON
-  const cppDecGeo = cppAlp.paper_31.geomean_dec_gb_s;
-  const cppDecAvg = cppAlp.paper_31.avg_dec_gb_s;
-  const cppEncGeo = cppAlp.paper_31.geomean_enc_gb_s;
-  const cppEncAvg = cppAlp.paper_31.avg_enc_gb_s;
-  const cppKernGeo = cppAlp.paper_31.geomean_enc_kernel_gb_s;
-  const cppKernAvg = cppAlp.paper_31.avg_enc_kernel_gb_s;
-  const cppRatioGeo = cppAlp.paper_31.geomean_ratio;
-  const cppRatioTotal = cppAlp.paper_31.total_raw_bytes / cppAlp.paper_31.total_compressed_bytes;
-
-  // Speedup calculations
-  const decSpeedupGeo = (faDecGeo / cppDecGeo).toFixed(2);
-  const decSpeedupAvg = (faDecAvg / cppDecAvg).toFixed(2);
-  const encSpeedupGeo = (faEncGeo / cppEncGeo).toFixed(2);
-  const encSpeedupAvg = (faEncAvg / cppEncAvg).toFixed(2);
-  const kernSpeedupGeo = (faKernGeo / cppKernGeo).toFixed(2);
-  const kernSpeedupAvg = (faKernAvg / cppKernAvg).toFixed(2);
-  const ratioLeadGeo = (((faRatioGeo - cppRatioGeo) / cppRatioGeo) * 100).toFixed(0);
-  const ratioLeadTotal = (((faRatioTotal - cppRatioTotal) / cppRatioTotal) * 100).toFixed(0);
+export const renderMd = (bench_data, lang = "zh") => {
+  const is_zh = lang === "zh",
+    isZh = is_zh,
+    sys_env = systemEnvByLang(is_zh),
+    algo_dict = bench_data.dict ?? algoDictByLi(bench_data.algorithms),
+    { fastalp, cpp_alp, pco, zstd, lz4, snappy, chimp128: chimp, gorilla } = algo_dict,
+    fa = metricsByAlgo(fastalp),
+    cpp = metricsByAlgo(cpp_alp),
+    {
+      dec_geo: faDecGeo,
+      dec_avg: faDecAvg,
+      enc_geo: faEncGeo,
+      enc_avg: faEncAvg,
+      kern_geo: faKernGeo,
+      kern_avg: faKernAvg,
+      ratio_geo: faRatioGeo,
+      ratio_total: faRatioTotal,
+    } = fa,
+    {
+      dec_geo: cppDecGeo,
+      dec_avg: cppDecAvg,
+      enc_geo: cppEncGeo,
+      enc_avg: cppEncAvg,
+      kern_geo: cppKernGeo,
+      kern_avg: cppKernAvg,
+      ratio_geo: cppRatioGeo,
+      ratio_total: cppRatioTotal,
+    } = cpp,
+    decSpeedupGeo = (faDecGeo / cppDecGeo).toFixed(2),
+    decSpeedupAvg = (faDecAvg / cppDecAvg).toFixed(2),
+    encSpeedupGeo = (faEncGeo / cppEncGeo).toFixed(2),
+    encSpeedupAvg = (faEncAvg / cppEncAvg).toFixed(2),
+    kernSpeedupGeo = (faKernGeo / cppKernGeo).toFixed(2),
+    kernSpeedupAvg = (faKernAvg / cppKernAvg).toFixed(2),
+    ratioLeadGeo = (((faRatioGeo - cppRatioGeo) / cppRatioGeo) * 100).toFixed(0),
+    ratioLeadTotal = (((faRatioTotal - cppRatioTotal) / cppRatioTotal) * 100).toFixed(0);
 
   // Table 1 Rows
   const renderTable1Row = (algo, isLeader = false, isBase = false) => {
@@ -102,7 +109,7 @@ export const renderMd = (benchData, lang = "zh") => {
 
   const table1Rows = [
     renderTable1Row(fastalp, true, false),
-    renderTable1Row(cppAlp, false, true),
+    renderTable1Row(cpp_alp, false, true),
     pco ? renderTable1Row(pco) : null,
     zstd ? renderTable1Row(zstd) : null,
     lz4 ? renderTable1Row(lz4) : null,
@@ -135,7 +142,7 @@ export const renderMd = (benchData, lang = "zh") => {
   const renderScenarioRow = (key) => {
     const meta = scenarioMeta[key];
     const faM = computeScenarioMetrics(fastalp, key);
-    const cppM = computeScenarioMetrics(cppAlp, key);
+    const cppM = computeScenarioMetrics(cpp_alp, key);
     const pcoM = computeScenarioMetrics(pco, key);
     const othM = computeScenarioMetrics(meta.otherAlgo, key);
 
