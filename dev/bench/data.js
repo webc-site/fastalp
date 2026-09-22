@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790054063657,
+  "lastUpdate": 1790054737720,
   "repoUrl": "https://github.com/webc-site/fastalp",
   "entries": {
     "FastALP Microbenchmarks": [
@@ -1342,6 +1342,174 @@ window.BENCHMARK_DATA = {
             "value": 860.8,
             "unit": "ns",
             "extra": "9.52 GB/s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "x-at-01@googlegroups.com",
+            "name": "x-at-01",
+            "username": "x-at-01"
+          },
+          "committer": {
+            "email": "x-at-01@googlegroups.com",
+            "name": "x-at-01",
+            "username": "x-at-01"
+          },
+          "distinct": false,
+          "id": "7d6651400454ffe824d453cd108942d06eb6809c",
+          "message": "perf: eliminate register spill in delta scan, decouple 1-cycle loop dependency in AlpDeltaConsumer",
+          "timestamp": "2026-09-22T13:24:04+08:00",
+          "tree_id": "349341cf11ac98a3e3d25f9fe9748b20ff727c4d",
+          "url": "https://github.com/webc-site/fastalp/commit/7d6651400454ffe824d453cd108942d06eb6809c"
+        },
+        "date": 1790054736994,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bench_compress_f32_large_batch_cached",
+            "value": 20470,
+            "unit": "ns",
+            "extra": "12.81 GB/s"
+          },
+          {
+            "name": "bench_compress_f32_large_batch_sampled",
+            "value": 50040,
+            "unit": "ns",
+            "extra": "5.24 GB/s"
+          },
+          {
+            "name": "bench_compress_f32_ramp_cached_1024",
+            "value": 654.6,
+            "unit": "ns",
+            "extra": "6.26 GB/s"
+          },
+          {
+            "name": "bench_compress_f32_ramp_sampled_1024",
+            "value": 1518,
+            "unit": "ns",
+            "extra": "2.7 GB/s"
+          },
+          {
+            "name": "bench_compress_f32_sensor_cached_1024",
+            "value": 392.7,
+            "unit": "ns",
+            "extra": "10.43 GB/s"
+          },
+          {
+            "name": "bench_compress_f32_sensor_sampled_1024",
+            "value": 1511,
+            "unit": "ns",
+            "extra": "2.71 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_identical_cached_1024",
+            "value": 266.3,
+            "unit": "ns",
+            "extra": "30.76 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_identical_sampled_1024",
+            "value": 1352,
+            "unit": "ns",
+            "extra": "6.06 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_large_batch_cached",
+            "value": 27200,
+            "unit": "ns",
+            "extra": "19.28 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_large_batch_sampled",
+            "value": 53190,
+            "unit": "ns",
+            "extra": "9.86 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_ramp_cached_1024",
+            "value": 1095,
+            "unit": "ns",
+            "extra": "7.48 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_ramp_sampled_1024",
+            "value": 2169,
+            "unit": "ns",
+            "extra": "3.78 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_random_cached_1024",
+            "value": 2243,
+            "unit": "ns",
+            "extra": "3.65 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_random_sampled_1024",
+            "value": 22940,
+            "unit": "ns",
+            "extra": "0.36 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_sensor_cached_1024",
+            "value": 766.1,
+            "unit": "ns",
+            "extra": "10.69 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_sensor_sampled_1024",
+            "value": 2549,
+            "unit": "ns",
+            "extra": "3.21 GB/s"
+          },
+          {
+            "name": "bench_decompress_f32_large_batch",
+            "value": 8102,
+            "unit": "ns",
+            "extra": "32.36 GB/s"
+          },
+          {
+            "name": "bench_decompress_f32_ramp_1024",
+            "value": 250.3,
+            "unit": "ns",
+            "extra": "16.36 GB/s"
+          },
+          {
+            "name": "bench_decompress_f32_sensor_1024",
+            "value": 129.6,
+            "unit": "ns",
+            "extra": "31.6 GB/s"
+          },
+          {
+            "name": "bench_decompress_f64_identical_1024",
+            "value": 95.6,
+            "unit": "ns",
+            "extra": "85.67 GB/s"
+          },
+          {
+            "name": "bench_decompress_f64_large_batch",
+            "value": 28860,
+            "unit": "ns",
+            "extra": "18.17 GB/s"
+          },
+          {
+            "name": "bench_decompress_f64_ramp_1024",
+            "value": 549.6,
+            "unit": "ns",
+            "extra": "14.91 GB/s"
+          },
+          {
+            "name": "bench_decompress_f64_random_1024",
+            "value": 656.3,
+            "unit": "ns",
+            "extra": "12.48 GB/s"
+          },
+          {
+            "name": "bench_decompress_f64_sensor_1024",
+            "value": 463.8,
+            "unit": "ns",
+            "extra": "17.66 GB/s"
           }
         ]
       }
