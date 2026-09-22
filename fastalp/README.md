@@ -58,6 +58,7 @@ A pure Rust implementation of adaptive lossless floating-point compression, deep
   - [Thread-Local Streaming Interface](#thread-local-streaming-interface)
   - [Explicit Instance Handle Interface](#explicit-instance-handle-interface)
 - [Changelog](#changelog)
+  - [v0.1.46](#v0146)
   - [v0.1.45](#v0145)
   - [v0.1.44](#v0144)
   - [v0.1.43](#v0143)
@@ -653,6 +654,15 @@ Designed for worker-pool architectures and per-column isolated states:
 
 ## Changelog
 
+### v0.1.46
+
+- **Benchmark Suite Upgraded with Real-World Industrial Datasets**:
+  Completely removed synthetic mock data generators in favor of 6 built-in representative real-world industrial datasets (temperature, stock prices, barometric pressure, food price index, volatile cryptocurrency, and air quality). Fully exercises FOR, Delta, Run-Length Repeat, Outlier Pruning, and ALP-RD decoding kernels.
+- **Zero-Allocation Benchmark Inner Loops**:
+  Eliminated hidden heap allocations across all three benchmark modes (sampled compression, warm-kernel compression, and decompression). Reusable scratch buffers and encoder instances isolate pure superscalar CPU execution throughput from memory allocator noise.
+- **Generic Ingestion & CI Regression Tracking Hardening**:
+  Unified generic CSV parsing and data tiling logic, eliminating code redundancy while enhancing benchmark report aggregation script compatibility.
+
 ### v0.1.45
 
 - **Two-Stage Dynamic Outlier Budget for FOR Mode**:
@@ -750,6 +760,7 @@ Designed for worker-pool architectures and per-column isolated states:
   - [线程局部流式接口](#线程局部流式接口)
   - [独立实例句柄接口](#独立实例句柄接口)
 - [更新日志](#更新日志)
+  - [v0.1.46](#v0146)
   - [v0.1.45](#v0145)
   - [v0.1.44](#v0144)
   - [v0.1.43](#v0143)
@@ -1438,6 +1449,15 @@ cargo build --release --features capi
 
 
 ## 更新日志
+
+### v0.1.46
+
+- **基准测试全面升级真实工业时序数据集**：<br>
+  彻底移除全部合成假数据生成器，改由内嵌六大代表性真实工业数据集（气象温度、证券股票价格、生态气压传感器、食品价格指数、加密货币高波动行情、环境空气质量传感器），全面覆盖基准值模式、时序差分模式、游程重复模式、离群点剪枝模式与浮点解耦模式。
+- **基准测试循环零堆内存分配重构**：<br>
+  在宏定义三联组基准测试（参数重采样压缩、热状态内核复用压缩、解压）中全面消除循环内部隐式堆内存分配，预分配缓冲区并原地复用，排除内存分配器耗时干扰，真实体现超标量 CPU 编码核心吞吐。
+- **泛型解析与自动化汇总兼容性强化**：<br>
+  抽象统一泛型 CSV 解析与铺砖逻辑，消除冗余代码；同步优化持续集成性能回归追踪流水线与报告汇总脚本。
 
 ### v0.1.45
 

@@ -1,5 +1,14 @@
 ## Changelog
 
+### v0.1.46
+
+- **Benchmark Suite Upgraded with Real-World Industrial Datasets**:
+  Completely removed synthetic mock data generators in favor of 6 built-in representative real-world industrial datasets (temperature, stock prices, barometric pressure, food price index, volatile cryptocurrency, and air quality). Fully exercises FOR, Delta, Run-Length Repeat, Outlier Pruning, and ALP-RD decoding kernels.
+- **Zero-Allocation Benchmark Inner Loops**:
+  Eliminated hidden heap allocations across all three benchmark modes (sampled compression, warm-kernel compression, and decompression). Reusable scratch buffers and encoder instances isolate pure superscalar CPU execution throughput from memory allocator noise.
+- **Generic Ingestion & CI Regression Tracking Hardening**:
+  Unified generic CSV parsing and data tiling logic, eliminating code redundancy while enhancing benchmark report aggregation script compatibility.
+
 ### v0.1.45
 
 - **Two-Stage Dynamic Outlier Budget for FOR Mode**:
