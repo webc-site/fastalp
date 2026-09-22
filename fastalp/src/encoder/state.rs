@@ -4,7 +4,7 @@ use crate::{
   constants::{FLAG_REPEAT, RD_SIZE_THRESHOLD_DEN, RD_SIZE_THRESHOLD_NUM, TYPE_MASK},
   encoder::{
     dict::{DictCandidate, dict_compressed_size, scan_dict, write_dict_chunk},
-    engine::compress_into_engine,
+    engine::{EngineCache, compress_into_engine},
     exception::{DEFAULT_EXCEPTIONS_CAP, Exception},
     rd::{MAX_RD_DICT_SIZE, encode_rd_fast, try_encode_rd, write_rd_chunk},
   },
@@ -206,19 +206,22 @@ impl<F: AlpFloat> Encoder<F> {
     dst.extend_from_slice(nr_payload);
   }
 
+  #[inline(always)]
+  fn engine_cache(&mut self) -> EngineCache<'_, F> {
+    EngineCache {
+      cached_params: self.cached_params,
+      cached_target_bw: &mut self.cached_target_bw,
+      cached_use_delta: &mut self.cached_use_delta,
+      encoded_buf: &mut self.encoded_buf,
+      exceptions: &mut self.exceptions,
+    }
+  }
+
   fn compress_chunk_inner(&mut self, data: &[F], dst: &mut Vec<u8>, force_delta: bool) {
     let count = data.len();
     if self.cached_use_repeat == Some(false) {
-      self.cached_params = compress_into_engine(
-        data,
-        dst,
-        force_delta,
-        self.cached_params,
-        &mut self.cached_target_bw,
-        &mut self.cached_use_delta,
-        &mut self.encoded_buf,
-        &mut self.exceptions,
-      );
+      let cache = self.engine_cache();
+      self.cached_params = compress_into_engine(data, dst, force_delta, cache);
       return;
     }
 
@@ -229,15 +232,18 @@ impl<F: AlpFloat> Encoder<F> {
       self.scratch_dst.clear();
       let mut scratch_target_bw = CachedTargetBw::Uninit;
       let mut scratch_use_delta = None;
+      let cache = EngineCache {
+        cached_params: self.cached_params,
+        cached_target_bw: &mut scratch_target_bw,
+        cached_use_delta: &mut scratch_use_delta,
+        encoded_buf: &mut self.scratch_encoded_buf,
+        exceptions: &mut self.scratch_exceptions,
+      };
       self.cached_params = compress_into_engine(
         &self.non_repeated_buf,
         &mut self.scratch_dst,
         force_delta,
-        self.cached_params,
-        &mut scratch_target_bw,
-        &mut scratch_use_delta,
-        &mut self.scratch_encoded_buf,
-        &mut self.scratch_exceptions,
+        cache,
       );
 
       if let Ok(nr_hdr) = read_header(&self.scratch_dst) {
@@ -259,16 +265,8 @@ impl<F: AlpFloat> Encoder<F> {
     // 16 个相邻采样对中若匹配少于 2 对（< 12.5%），在 5ns 内直接跳过全量扫描
     if sample_matches < 2 {
       self.cached_use_repeat = Some(false);
-      self.cached_params = compress_into_engine(
-        data,
-        dst,
-        force_delta,
-        self.cached_params,
-        &mut self.cached_target_bw,
-        &mut self.cached_use_delta,
-        &mut self.encoded_buf,
-        &mut self.exceptions,
-      );
+      let cache = self.engine_cache();
+      self.cached_params = compress_into_engine(data, dst, force_delta, cache);
       return;
     }
 
@@ -286,31 +284,15 @@ impl<F: AlpFloat> Encoder<F> {
     // 只有当重复率达到 20% 以上（repeat_count * 5 >= count）时，节省的编码体积才足够覆盖位图与两趟解码成本
     if repeat_count * 5 < count {
       self.cached_use_repeat = Some(false);
-      self.cached_params = compress_into_engine(
-        data,
-        dst,
-        force_delta,
-        self.cached_params,
-        &mut self.cached_target_bw,
-        &mut self.cached_use_delta,
-        &mut self.encoded_buf,
-        &mut self.exceptions,
-      );
+      let cache = self.engine_cache();
+      self.cached_params = compress_into_engine(data, dst, force_delta, cache);
       return;
     }
 
     // 先执行正常编码写入 dst，保留其结果与参数
     let start_len = dst.len();
-    let normal_params = compress_into_engine(
-      data,
-      dst,
-      force_delta,
-      self.cached_params,
-      &mut self.cached_target_bw,
-      &mut self.cached_use_delta,
-      &mut self.encoded_buf,
-      &mut self.exceptions,
-    );
+    let cache = self.engine_cache();
+    let normal_params = compress_into_engine(data, dst, force_delta, cache);
     let normal_total_size = dst.len() - start_len;
 
     // 数学理论下界短路：Repeat 数据块含有独立块头 (>= 3 字节) 与位图 (bitmap_len)，
@@ -328,15 +310,18 @@ impl<F: AlpFloat> Encoder<F> {
     self.scratch_dst.clear();
     let mut scratch_target_bw = CachedTargetBw::Uninit;
     let mut scratch_use_delta = None;
+    let cache = EngineCache {
+      cached_params: self.cached_params,
+      cached_target_bw: &mut scratch_target_bw,
+      cached_use_delta: &mut scratch_use_delta,
+      encoded_buf: &mut self.scratch_encoded_buf,
+      exceptions: &mut self.scratch_exceptions,
+    };
     let nr_params = compress_into_engine(
       &self.non_repeated_buf,
       &mut self.scratch_dst,
       force_delta,
-      self.cached_params,
-      &mut scratch_target_bw,
-      &mut scratch_use_delta,
-      &mut self.scratch_encoded_buf,
-      &mut self.scratch_exceptions,
+      cache,
     );
 
     let nr_hdr = match read_header(&self.scratch_dst) {
@@ -367,16 +352,8 @@ impl<F: AlpFloat> Encoder<F> {
   fn compress_chunk(&mut self, data: &[F], dst: &mut Vec<u8>, force_delta: bool) {
     let count = data.len();
     if count <= 4 {
-      self.cached_params = compress_into_engine(
-        data,
-        dst,
-        force_delta,
-        self.cached_params,
-        &mut self.cached_target_bw,
-        &mut self.cached_use_delta,
-        &mut self.encoded_buf,
-        &mut self.exceptions,
-      );
+      let cache = self.engine_cache();
+      self.cached_params = compress_into_engine(data, dst, force_delta, cache);
       return;
     }
 

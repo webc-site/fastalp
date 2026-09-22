@@ -135,11 +135,10 @@ pub(crate) unsafe fn expand_repeats<F: AlpFloat>(
           *dst_ptr.add(k) = *non_repeats.add(src_idx);
         }
         prev = *dst_ptr.add(7);
-        #[allow(clippy::needless_range_loop)]
-        for b in 1..8 {
+        for (b, &byte) in bitmap[1..8].iter().enumerate() {
           expand_byte(
-            bitmap[b],
-            b * 8,
+            byte,
+            (b + 1) * 8,
             &mut src_idx,
             &mut prev,
             non_repeats,

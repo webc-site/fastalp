@@ -1,6 +1,8 @@
 use fearless_simd::{Level, Simd, dispatch, prelude::*};
 
-use crate::{constants::MAX_EXCEPTIONS, encoder::exception::Exception, float::AlpFloat};
+use crate::{
+  constants::MAX_EXCEPTIONS, encoder::exception::Exception, float::AlpFloat, params::EncodeFactors,
+};
 
 macro_rules! define_fearless_kernel {
   (
@@ -13,18 +15,20 @@ macro_rules! define_fearless_kernel {
     $ints:ident,
     $uints:ident
   ) => {
-    #[allow(clippy::too_many_arguments)]
     #[inline(always)]
     unsafe fn $kernel_fn<S: Simd>(
       simd: S,
       slice: &[$F],
       enc_ptr: *mut $I,
-      exp_factor: $F,
-      fac_int: i64,
-      frac_exp: $F,
-      use_div: bool,
+      factors: $crate::params::EncodeFactors<$F>,
       exceptions: &mut Vec<Exception<$U>>,
     ) -> ($I, $I) {
+      let $crate::params::EncodeFactors {
+        exp_factor,
+        fac_int,
+        frac_exp,
+        use_div,
+      } = factors;
       let n = S::$floats::N;
       let stride = n * 4;
       let exp_v = S::$floats::splat(simd, exp_factor);
@@ -194,16 +198,13 @@ macro_rules! define_fearless_kernel {
     pub(crate) unsafe fn $simd_fn(
       slice: &[$F],
       enc_ptr: *mut $I,
-      exp_factor: $F,
-      fac_int: i64,
-      frac_exp: $F,
-      use_div: bool,
+      factors: $crate::params::EncodeFactors<$F>,
       exceptions: &mut Vec<Exception<$U>>,
     ) -> ($I, $I) {
       let level = Level::new();
       dispatch!(level, simd => {
         unsafe {
-          $kernel_fn(simd, slice, enc_ptr, exp_factor, fac_int, frac_exp, use_div, exceptions)
+          $kernel_fn(simd, slice, enc_ptr, factors, exceptions)
         }
       })
     }
@@ -238,16 +239,9 @@ define_fearless_kernel!(
 pub(crate) unsafe fn encode_slice<F: AlpFloat>(
   slice: &[F],
   enc_ptr: *mut F::Int,
-  exp_factor: F,
-  fac_int: i64,
-  frac_exp: F,
-  use_div: bool,
+  factors: EncodeFactors<F>,
   exceptions: &mut Vec<Exception<F::RawBits>>,
 ) -> (F::Int, F::Int) {
   // SAFETY: Caller guarantees slice is continuous and enc_ptr has space for at least slice.len() elements.
-  unsafe {
-    F::encode_simd(
-      slice, enc_ptr, exp_factor, fac_int, frac_exp, use_div, exceptions,
-    )
-  }
+  unsafe { F::encode_simd(slice, enc_ptr, factors, exceptions) }
 }
