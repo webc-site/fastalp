@@ -1,5 +1,14 @@
 ## Changelog
 
+### v0.1.44
+
+- **Branch-Free Repeat Run-Length Expansion**:
+  Derived and applied the bitmap state transition identity, eliminating all bit-by-bit conditional branches in repeat expansion in favor of single-instruction arithmetic step updates and direct pointer writes; coupled with 8-element unrolled write macros to eradicate pipeline stalls, boosting decompression throughput on repeat-heavy datasets by 15% ~ 24% (e.g. `food_prices` up to 20.8 GB/s, `nyc29` up to 18.2 GB/s).
+- **16-Element Wide-Load Unpacking for Low Bit-Widths**:
+  Fully rolled out 16-element instruction-level parallelism (ILP) 2-way unrolling across 1, 2, and 4-bit unpacking kernels; leveraged single-instruction 16-bit, 32-bit, and 64-bit wide-word loads to cut load instructions in half and saturate superscalar ALU execution ports.
+- **Global Unrolling Macro Framework Expansion**:
+  Introduced `unroll_16!` and `write_16!` macros in `src/macros.rs`, eliminating repetitive manual unrolling boilerplate and removing unused constants and slice dead code.
+
 ### v0.1.43
 
 - **4-Step Linear Recurrence Prefix Tree**:
