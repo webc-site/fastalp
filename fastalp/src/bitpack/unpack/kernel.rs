@@ -1,4 +1,4 @@
-use core::{ptr::copy_nonoverlapping, slice::from_raw_parts};
+use core::ptr::copy_nonoverlapping;
 
 use super::consumer::AlpConsumer;
 use crate::constants::BYTES_U64;
@@ -8,8 +8,6 @@ const MASK_2BIT: u8 = 0x03;
 const MASK_4BIT: u8 = 0x0f;
 
 const CHUNK_8: usize = 8;
-const CHUNK_4: usize = 4;
-const CHUNK_2: usize = 2;
 
 #[inline(always)]
 pub(crate) unsafe fn unpack_1<T: Copy, C: AlpConsumer<T>>(
@@ -20,31 +18,53 @@ pub(crate) unsafe fn unpack_1<T: Copy, C: AlpConsumer<T>>(
 ) {
   unsafe {
     if let Some(lut) = consumer.use_lut_1() {
-      let full_bytes = count / CHUNK_8;
-      for &b in from_raw_parts(src_ptr, full_bytes) {
+      let full_16 = count / 16;
+      for g in 0..full_16 {
+        let w = u16::from_le(src_ptr.add(g * 2).cast::<u16>().read_unaligned());
+        write_16!(dst_ptr, k => *lut.get_unchecked(((w >> k) & 1) as usize));
+        dst_ptr = dst_ptr.add(16);
+      }
+      let rem_bytes = (count % 16) / CHUNK_8;
+      if rem_bytes > 0 {
+        let b = *src_ptr.add(full_16 * 2);
         write_8!(dst_ptr, k => *lut.get_unchecked(((b >> k) & MASK_1BIT) as usize));
         dst_ptr = dst_ptr.add(CHUNK_8);
       }
       let rem = count % CHUNK_8;
       if rem > 0 {
-        let b = *src_ptr.add(full_bytes);
+        let b = *src_ptr.add(full_16 * 2 + rem_bytes);
         for shift in 0..rem {
           *dst_ptr = *lut.get_unchecked(((b >> shift) & MASK_1BIT) as usize);
           dst_ptr = dst_ptr.add(1);
         }
       }
     } else {
-      let full_bytes = count / CHUNK_8;
-      for (b_idx, &b) in from_raw_parts(src_ptr, full_bytes).iter().enumerate() {
+      let full_16 = count / 16;
+      for g in 0..full_16 {
+        let w = u16::from_le(src_ptr.add(g * 2).cast::<u16>().read_unaligned());
+        let b0 = (w & 0xff) as u8;
+        let b1 = (w >> 8) as u8;
+        consumer.consume_8(
+          arr_8!(k => ((b0 >> k) & MASK_1BIT) as u64),
+          dst_ptr.add(g * 16),
+        );
+        consumer.consume_8(
+          arr_8!(k => ((b1 >> k) & MASK_1BIT) as u64),
+          dst_ptr.add(g * 16 + 8),
+        );
+      }
+      let rem_groups = (count % 16) / CHUNK_8;
+      if rem_groups > 0 {
+        let b = *src_ptr.add(full_16 * 2);
         consumer.consume_8(
           arr_8!(k => ((b >> k) & MASK_1BIT) as u64),
-          dst_ptr.add(b_idx * CHUNK_8),
+          dst_ptr.add(full_16 * 16),
         );
       }
       let rem = count % CHUNK_8;
       if rem > 0 {
-        let b = *src_ptr.add(full_bytes);
-        let rem_start = full_bytes * CHUNK_8;
+        let b = *src_ptr.add(full_16 * 2 + rem_groups);
+        let rem_start = full_16 * 16 + rem_groups * CHUNK_8;
         for shift in 0..rem {
           consumer.consume_1(
             ((b >> shift) & MASK_1BIT) as u64,
@@ -65,39 +85,54 @@ pub(crate) unsafe fn unpack_2<T: Copy, C: AlpConsumer<T>>(
 ) {
   unsafe {
     if let Some(lut) = consumer.use_lut_2() {
-      let full_bytes = count / CHUNK_4;
-      for &b in from_raw_parts(src_ptr, full_bytes) {
-        write_4!(dst_ptr, k => *lut.get_unchecked(((b >> (k * 2)) & MASK_2BIT) as usize));
-        dst_ptr = dst_ptr.add(CHUNK_4);
+      let full_16 = count / 16;
+      for g in 0..full_16 {
+        let w = u32::from_le(src_ptr.add(g * 4).cast::<u32>().read_unaligned());
+        write_16!(dst_ptr, k => *lut.get_unchecked(((w >> (k * 2)) & (MASK_2BIT as u32)) as usize));
+        dst_ptr = dst_ptr.add(16);
       }
-      let rem = count % CHUNK_4;
-      if rem > 0 {
-        let b = *src_ptr.add(full_bytes);
-        for i in 0..rem {
-          *dst_ptr = *lut.get_unchecked(((b >> (i * 2)) & MASK_2BIT) as usize);
-          dst_ptr = dst_ptr.add(1);
-        }
+      let rem_8 = (count % 16) / CHUNK_8;
+      if rem_8 > 0 {
+        let w = u16::from_le(src_ptr.add(full_16 * 4).cast::<u16>().read_unaligned());
+        write_8!(dst_ptr, k => *lut.get_unchecked(((w >> (k * 2)) & (MASK_2BIT as u16)) as usize));
+        dst_ptr = dst_ptr.add(CHUNK_8);
+      }
+      let rem_start = full_16 * 16 + rem_8 * CHUNK_8;
+      for i in rem_start..count {
+        let bit_pos = (i - rem_start) * 2;
+        let b = *src_ptr.add(full_16 * 4 + rem_8 * 2 + (bit_pos >> 3));
+        *dst_ptr = *lut.get_unchecked(((b >> (bit_pos & 7)) & MASK_2BIT) as usize);
+        dst_ptr = dst_ptr.add(1);
       }
     } else {
-      let full_groups = count / CHUNK_8;
-      for g in 0..full_groups {
-        let w = u16::from_le(src_ptr.add(g * 2).cast::<u16>().read_unaligned()) as u64;
+      let full_16 = count / 16;
+      for g in 0..full_16 {
+        let w = u32::from_le(src_ptr.add(g * 4).cast::<u32>().read_unaligned());
+        let w0 = (w & 0xffff) as u64;
+        let w1 = (w >> 16) as u64;
         consumer.consume_8(
-          arr_8!(k => (w >> (k * 2)) & (MASK_2BIT as u64)),
-          dst_ptr.add(g * CHUNK_8),
+          arr_8!(k => (w0 >> (k * 2)) & (MASK_2BIT as u64)),
+          dst_ptr.add(g * 16),
+        );
+        consumer.consume_8(
+          arr_8!(k => (w1 >> (k * 2)) & (MASK_2BIT as u64)),
+          dst_ptr.add(g * 16 + 8),
         );
       }
-      let rem_start = full_groups * CHUNK_8;
-      let mut rem_i = rem_start;
-      while rem_i < count {
-        let bit_pos = (rem_i - rem_start) * 2;
-        let byte_idx = full_groups * 2 + (bit_pos >> 3);
-        let b = *src_ptr.add(byte_idx);
-        consumer.consume_1(
-          ((b >> (bit_pos & 7)) & MASK_2BIT) as u64,
-          dst_ptr.add(rem_i),
+      let rem_groups = (count % 16) / CHUNK_8;
+      if rem_groups > 0 {
+        let w = u16::from_le(src_ptr.add(full_16 * 4).cast::<u16>().read_unaligned()) as u64;
+        consumer.consume_8(
+          arr_8!(k => (w >> (k * 2)) & (MASK_2BIT as u64)),
+          dst_ptr.add(full_16 * 16),
         );
-        rem_i += 1;
+      }
+      let rem_start = full_16 * 16 + rem_groups * CHUNK_8;
+      for i in rem_start..count {
+        let bit_pos = (i - rem_start) * 2;
+        let byte_idx = full_16 * 4 + rem_groups * 2 + (bit_pos >> 3);
+        let b = *src_ptr.add(byte_idx);
+        consumer.consume_1(((b >> (bit_pos & 7)) & MASK_2BIT) as u64, dst_ptr.add(i));
       }
     }
   }
@@ -112,46 +147,64 @@ pub(crate) unsafe fn unpack_4<T: Copy, C: AlpConsumer<T>>(
 ) {
   unsafe {
     if let Some(lut) = consumer.use_lut_4() {
-      let full_bytes = count / CHUNK_2;
-      let (byte_chunks, byte_rem) = from_raw_parts(src_ptr, full_bytes).as_chunks::<CHUNK_2>();
-      for chunk in byte_chunks {
-        let b0 = chunk[0];
-        let b1 = chunk[1];
-        *dst_ptr.add(0) = *lut.get_unchecked((b0 & MASK_4BIT) as usize);
-        *dst_ptr.add(1) = *lut.get_unchecked((b0 >> 4) as usize);
-        *dst_ptr.add(2) = *lut.get_unchecked((b1 & MASK_4BIT) as usize);
-        *dst_ptr.add(3) = *lut.get_unchecked((b1 >> 4) as usize);
-        dst_ptr = dst_ptr.add(CHUNK_4);
+      let full_16 = count / 16;
+      for g in 0..full_16 {
+        let w = u64::from_le(src_ptr.add(g * 8).cast::<u64>().read_unaligned());
+        write_16!(dst_ptr, k => *lut.get_unchecked(((w >> (k * 4)) & (MASK_4BIT as u64)) as usize));
+        dst_ptr = dst_ptr.add(16);
       }
-      for &b in byte_rem {
-        *dst_ptr.add(0) = *lut.get_unchecked((b & MASK_4BIT) as usize);
-        *dst_ptr.add(1) = *lut.get_unchecked((b >> 4) as usize);
-        dst_ptr = dst_ptr.add(CHUNK_2);
+      let rem_8 = (count % 16) / CHUNK_8;
+      if rem_8 > 0 {
+        let w = u32::from_le(src_ptr.add(full_16 * 8).cast::<u32>().read_unaligned());
+        write_8!(dst_ptr, k => *lut.get_unchecked(((w >> (k * 4)) & (MASK_4BIT as u32)) as usize));
+        dst_ptr = dst_ptr.add(CHUNK_8);
       }
-      if !count.is_multiple_of(CHUNK_2) {
-        let b = *src_ptr.add(full_bytes);
-        *dst_ptr = *lut.get_unchecked((b & MASK_4BIT) as usize);
+      let rem_start = full_16 * 16 + rem_8 * CHUNK_8;
+      for i in rem_start..count {
+        let bit_pos = (i - rem_start) * 4;
+        let b = *src_ptr.add(full_16 * 8 + rem_8 * 4 + (bit_pos >> 3));
+        let nibble = if (bit_pos & 4) == 0 {
+          b & MASK_4BIT
+        } else {
+          b >> 4
+        };
+        *dst_ptr = *lut.get_unchecked(nibble as usize);
+        dst_ptr = dst_ptr.add(1);
       }
     } else {
-      let full_groups = count / CHUNK_8;
-      for g in 0..full_groups {
-        let w = u32::from_le(src_ptr.add(g * 4).cast::<u32>().read_unaligned()) as u64;
+      let full_16 = count / 16;
+      for g in 0..full_16 {
+        let w = u64::from_le(src_ptr.add(g * 8).cast::<u64>().read_unaligned());
+        let w0 = w & 0xffff_ffff;
+        let w1 = w >> 32;
         consumer.consume_8(
-          arr_8!(k => (w >> (k * 4)) & (MASK_4BIT as u64)),
-          dst_ptr.add(g * CHUNK_8),
+          arr_8!(k => (w0 >> (k * 4)) & (MASK_4BIT as u64)),
+          dst_ptr.add(g * 16),
+        );
+        consumer.consume_8(
+          arr_8!(k => (w1 >> (k * 4)) & (MASK_4BIT as u64)),
+          dst_ptr.add(g * 16 + 8),
         );
       }
-      let rem_start = full_groups * CHUNK_8;
-      let mut rem_i = rem_start;
-      while rem_i < count {
-        let bit_pos = (rem_i - rem_start) * 4;
-        let byte_idx = full_groups * 4 + (bit_pos >> 3);
-        let b = *src_ptr.add(byte_idx);
-        consumer.consume_1(
-          ((b >> (bit_pos & 7)) & MASK_4BIT) as u64,
-          dst_ptr.add(rem_i),
+      let rem_groups = (count % 16) / CHUNK_8;
+      if rem_groups > 0 {
+        let w = u32::from_le(src_ptr.add(full_16 * 8).cast::<u32>().read_unaligned()) as u64;
+        consumer.consume_8(
+          arr_8!(k => (w >> (k * 4)) & (MASK_4BIT as u64)),
+          dst_ptr.add(full_16 * 16),
         );
-        rem_i += 1;
+      }
+      let rem_start = full_16 * 16 + rem_groups * CHUNK_8;
+      for i in rem_start..count {
+        let bit_pos = (i - rem_start) * 4;
+        let byte_idx = full_16 * 8 + rem_groups * 4 + (bit_pos >> 3);
+        let b = *src_ptr.add(byte_idx);
+        let nibble = if (bit_pos & 4) == 0 {
+          b & MASK_4BIT
+        } else {
+          b >> 4
+        };
+        consumer.consume_1(nibble as u64, dst_ptr.add(i));
       }
     }
   }
