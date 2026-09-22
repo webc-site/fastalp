@@ -4,8 +4,8 @@ use crate::{
 };
 
 /// Default capacity for exceptions vector to avoid heap reallocation on typical outlier count.
-/// 异常值向量默认预分配容量
-pub const DEFAULT_EXCEPTIONS_CAP: usize = 16;
+/// 异常值向量默认预分配容量（匹配 FOR 离群值最大剪枝预算 32，消除剪枝时的堆重分配）
+pub const DEFAULT_EXCEPTIONS_CAP: usize = 32;
 
 /// Single exception value record.
 /// 单个异常值记录

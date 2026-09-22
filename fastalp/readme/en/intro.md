@@ -3,7 +3,7 @@
 A pure Rust implementation of adaptive lossless floating-point compression, deeply absorbing and extending the theoretical foundation of the ACM SIGMOD 2024 Best Artifact paper [ALP](https://dl.acm.org/doi/10.1145/3626717), providing high-performance unified generic interfaces for both `f64` and `f32` streams.
 
 <p align="center">
-  <img src="https://fastly.jsdelivr.net/gh/webc-fs/-@Lr/3nCyOwmREyprSiLlqsrA.svg" alt="fastalp Floating-Point Compression Performance & Ratio Benchmark" width="100%">
+  <img src="https://fastly.jsdelivr.net/gh/webc-fs/-@e3/K1KOZ4aFcUvbP7cGoTRQ.svg" alt="fastalp Floating-Point Compression Performance & Ratio Benchmark" width="100%">
   <br>
   <sub><b>Benchmark Environment</b>: CPU: Apple M2 Max (12 Cores) ｜ OS: macOS 26.5.1 ｜ Toolchain: Rust 1.100.0-nightly / Clang (-O3)</sub>
 </p>
@@ -61,13 +61,28 @@ Due to the IEEE 754 layout of exponents and mantissas, general-purpose byte comp
 - **Intelligent Outlier Pruning for Sparse Constants (0-bit Encoding)**:<br>
   Isolates sparse impulse spikes to the exception dictionary, allowing base streams to drop to 0-bit width and delivering 150x ~ 744x compression ratios on constant-heavy series.
 
+- **Dual-Stage Dynamic Outlier Budget Relaxation (16 to 32)**:<br>
+  Pre-prunes with a tight 16-exception ceiling to preserve Delta candidates, then relaxes exclusively to a 32-exception budget in FOR mode to crush long-tail spike bit-widths, with base-restoration purging delta artifacts.
+
 - **Previous-Value Exception Backfilling**:<br>
   Backfills exception slots with preceding integers to prevent artificial gradient spikes in difference encoding.
 
 - **Hardware-Native Round-Ties-Even (`round_ties_even`)**:<br>
   Replaces the legacy IEEE 754 magic number offset (`0x0018000000000000`, limited to $[-2^{51}, 2^{51}]$) with direct hardware round-to-nearest-even instructions (x86 `ROUNDSD` / ARM64 `FRINTN`), guaranteeing full-range fidelity.
 
-- **2-bit Self-Describing Headers & Arbitrary Array Slicing**:<br>
+- **Branch-Free Repeat Expansion**:<br>
+  Eliminates conditional branch stalls and pipeline bubbles using bitwise state transition invariants, boosting repeat-dense decompression throughput significantly.
+
+- **Fused Single-Pass Consumer & 1-Cycle Dependency Decoupling**:<br>
+  Eliminates 8KB scratch buffers by directly fusing bit-unpacking, prefix-sum recurrence, and float reconstruction into a single register pipeline; decouples recurrence dependencies down to 1 clock cycle.
+
+- **16-Element Wide Word Loading & Full-Bitwidth Const Generics Dispatch**:<br>
+  Performs 16-element ILP loads on small bit-widths (1, 2, 4 bits) with 64-bit word reads; uses compile-time const generics dispatch over all 1~64 bit-widths for 28.0+ GB/s decode throughput.
+
+- **Real Doubles (ALP-RD) Stack-Allocated Decoupling**:<br>
+  Uses stack-allocated open-addressing hash tables with Fibonacci hashing and bitmask scans for zero-heap dictionary construction, and direct 1024-block streaming decode to boost decompression throughput to 11.6+ GB/s.
+
+- **2-bit Self-Describing Headers & Large Slice Streaming**:<br>
   Compact 3-byte headers for full 1024-element blocks and 1-byte headers for raw fallbacks, automatically scaling to 32-bit counts for large slices.
 
 - **12.5% Exception Ceiling & RAW Fallback**:<br>
@@ -77,4 +92,4 @@ Due to the IEEE 754 layout of exponents and mantissas, general-purpose byte comp
   Detects uniform arrays in a single comparison cycle, emitting 1024 uniform items in 11 bytes within 1 clock cycle (744x ratio).
 
 - **Three-Stage Microarchitectural Sampling Pruning**:<br>
-  Replaces unpruned parameter searches with a 3-tier cascade (pure decimal early return, 4/16-sample short-circuiting, and non-decimal abort), boosting end-to-end compression throughput to **3.7 GB/s (4.6x faster than C++ ALP)**; pure encoding kernel throughput reaches **6.0 GB/s (1.10x faster than C++ ALP)**; streaming throughput reaches **15~24+ GB/s** with cached parameters.
+  Replaces unpruned parameter searches with a 3-tier cascade (pure decimal early return, 4/16-sample short-circuiting, and non-decimal abort), boosting end-to-end compression throughput to **1.9 GB/s (2.41x faster than C++ ALP 0.8 GB/s)**; pure encoding kernel throughput reaches **7.1 GB/s (1.35x faster than C++ ALP 5.3 GB/s)**; streaming throughput reaches **15~24+ GB/s** with cached parameters.

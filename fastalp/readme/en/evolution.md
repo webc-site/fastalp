@@ -29,8 +29,20 @@
 - **Intelligent Outlier Pruning & 0-bit Sparse Encoding**:
   For datasets where 99% of values are constant with rare isolated pulses, `fastalp` strips outliers into the exception dictionary, allowing the main bitstream to drop to 0-bit. Delivers compression ratios exceeding 150x ~ 744x.
 
-- **Exception Previous-Value Backfill**:
-  Backfills exceptions with previous integer values to prevent artificial gradient steps that corrupt delta difference bit-widths.
+- **Dual-Stage Dynamic Outlier Pruning & Budget Relaxation (16 to 32)**:
+  Solves the trade-off between shielding Delta candidates and maximizing FOR compression. Pre-pruning enforces a strict 16-exception budget to preserve Delta eligibility. Once FOR mode is chosen, the exception budget relaxes to 32 to aggressively narrow long-tail spike bit-widths. Atomically resets exception locations to the base value prior to FOR pruning to purge Delta backfill artifacts, preventing histogram double counting.
+
+- **Previous-Value Exception Backfilling**:
+  Backfills exceptions with preceding integers to prevent artificial gradient steps that corrupt delta difference bit-widths.
+
+- **Four-Step Recurrence Delta Tree & 1-Cycle Dependency Decoupling**:
+  Precomputes minimal delta step vectors to decompose sequential prefix-sum dependencies into isomorphic four-element balanced binary trees. Decouples the running accumulator from the 8-element delta sum, slashing cross-batch loop dependency latency to a single clock cycle and accelerating delta decompression to 18 ~ 28 GB/s.
+
+- **16-Element Wide Word Loading & Instruction-Level Parallelism**:
+  Extends narrow unpacking kernels (1, 2, 4 bits) with 16-element dual unrolling (`unroll_16!`, `write_16!`), reading 16 elements per 64-bit load to saturate modern superscalar execution units.
+
+- **Branch-Free Repeat Expansion**:
+  Applies bitwise state transition invariants to eliminate all conditional branches and pipeline stalls during repeat expansion; triggers 64-element native SIMD copies/broadcasts on full-zero/full-one words, boosting repeat-dense decompression throughput significantly.
 
 - **2-bit Self-Describing Headers & Arbitrary Length Support**:
   Employs a 2-bit length tag: standard 1024-element frames require only 3 bytes of header, while RAW fallback frames require 1 byte. Automatically scales to 32-bit offsets for arrays exceeding 65,535 elements.
@@ -42,7 +54,7 @@
   Checks `slice[1] == slice[0]` on block entry; non-constant streams exit in 1 CPU cycle, while constant sequences encode 1024 elements into 11 bytes (744x ratio).
 
 - **Three-Stage Microarchitectural Pruning Pipeline**:
-  Replaces unpruned parameter searches with a 3-tier cascade (pure decimal early return, 4/16-sample short-circuiting, and non-decimal abort), boosting end-to-end compression throughput from 0.80 GB/s to **3.7 GB/s** (4.6x geometric mean speedup, up to 7.0x in specific datasets); pure encoding kernel throughput reaches **6.0 GB/s (1.10x faster than C++ ALP)**; streaming throughput reaches **15~24+ GB/s** with cached parameters.
+  Replaces unpruned parameter searches with a 3-tier cascade (pure decimal early return, 4/16-sample short-circuiting, and non-decimal abort), boosting end-to-end compression throughput from 0.8 GB/s to **1.9 GB/s** (2.41x faster than C++ ALP); pure encoding kernel throughput reaches **7.1 GB/s (1.35x faster than C++ ALP 5.3 GB/s)**; streaming throughput reaches **15~24+ GB/s** with cached parameters.
 
 - **Pure Register SIMD Decompression**:
   Vectorizes common bit-widths (8, 16, 32, 64) into branchless register pipelines, achieving **27.0 GB/s** geometric mean decompression throughput (surpassing C++ ALP's 20.0 GB/s, 1.35x faster).
