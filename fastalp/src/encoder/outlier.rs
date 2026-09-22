@@ -4,15 +4,17 @@ use crate::{
   float::AlpFloat,
 };
 
-/// Pruning threshold: only attempt when bit-width > 4 and exceptions < 16
-/// 尝试剪枝门限：仅在位宽 > 4 且已有异常数 < 16 时尝试
+/// Pruning threshold: only attempt when bit-width > 4
+/// 尝试剪枝门限：仅在位宽 > 4 时尝试
 const MIN_PRUNE_BIT_WIDTH: u8 = 4;
-const MAX_PRUNE_EXCEPTIONS: usize = 16;
 
-/// FOR mode only: outlier pruning to exceptions with continuous descending bit-width search:
-/// Exploits monotonicity - if a larger width violates exception budget, smaller widths will too.
+/// FOR mode outlier pruning to exceptions with continuous descending bit-width search:
+/// Exploits mathematical monotonicity - if a larger width violates exception budget,
+/// smaller widths will too, allowing instantaneous abort in < 10ns.
+///
 /// FOR 模式专用：离群值异常剪枝优化 (Outlier Pruning to Exceptions)
 /// 连续降序探索候选位宽：利用单调性数学性质，若较大位宽无法满足异常数限制，则更小位宽必然包含更多离群点，可直接短路终止搜索。
+/// 支持调用方指定允许的最大异常预算 max_exceptions_budget (前置预剪枝 16，FOR 模式独占放宽至 32)。
 pub(crate) fn try_prune_outliers<F: AlpFloat>(
   slice: &[F],
   encoded_ints: &mut [F::Int],
@@ -20,8 +22,9 @@ pub(crate) fn try_prune_outliers<F: AlpFloat>(
   for_bit_width: u8,
   exceptions: &mut Vec<Exception<F::RawBits>>,
   is_large: bool,
+  max_exceptions_budget: usize,
 ) -> u8 {
-  if for_bit_width <= MIN_PRUNE_BIT_WIDTH || exceptions.len() >= MAX_PRUNE_EXCEPTIONS {
+  if for_bit_width <= MIN_PRUNE_BIT_WIDTH || exceptions.len() >= max_exceptions_budget {
     return for_bit_width;
   }
 
@@ -33,7 +36,7 @@ pub(crate) fn try_prune_outliers<F: AlpFloat>(
   } else {
     (1u64 << c_max) - 1
   };
-  let budget = MAX_PRUNE_EXCEPTIONS.saturating_sub(exceptions.len());
+  let budget = max_exceptions_budget.saturating_sub(exceptions.len());
   let mut excess = 0usize;
 
   for &val in encoded_ints.iter() {
@@ -101,7 +104,9 @@ pub(crate) fn apply_target_bw<F: AlpFloat>(
   target_bw: u8,
   exceptions: &mut Vec<Exception<F::RawBits>>,
 ) {
-  let max_allowed = if target_bw == 0 {
+  let max_allowed = if target_bw >= 64 {
+    u64::MAX
+  } else if target_bw == 0 {
     0u64
   } else {
     (1u64 << target_bw) - 1

@@ -32,6 +32,13 @@ pub enum CachedTargetBw {
   Disabled,
 }
 
+impl CachedTargetBw {
+  #[inline(always)]
+  pub const fn is_uninit(&self) -> bool {
+    matches!(self, Self::Uninit)
+  }
+}
+
 /// Stateful encoder that caches optimal parameters and scratch buffers across adjacent chunks.
 /// 状态化编码器：在连续数据块编码时复用已探测的最优参数与内部工作缓冲区，消除重复采样开销与内存分配。
 #[derive(Debug, Clone)]
