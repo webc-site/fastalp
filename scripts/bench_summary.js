@@ -72,7 +72,7 @@ let max_dec_throughput = 0,
   max_enc_throughput = 0;
 
 for (const item of item_li) {
-  if (item.name.includes("decompress")) {
+  if (item.name.includes("decompress") || item.name.includes("_dec")) {
     if (item.throughput_gb > max_dec_throughput) max_dec_throughput = item.throughput_gb;
   } else {
     if (item.throughput_gb > max_enc_throughput) max_enc_throughput = item.throughput_gb;
@@ -80,7 +80,7 @@ for (const item of item_li) {
 }
 
 const formatMode = (name) => {
-  if (name.includes("decompress")) return "Decompress";
+  if (name.includes("decompress") || name.includes("_dec")) return "Decompress";
   if (name.includes("cached")) return "Warm Kernel";
   if (name.includes("sampled")) return "Cold Sampled";
   return "Default";
