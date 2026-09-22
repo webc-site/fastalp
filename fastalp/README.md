@@ -17,7 +17,7 @@
 A pure Rust implementation of adaptive lossless floating-point compression, deeply absorbing and extending the theoretical foundation of the ACM SIGMOD 2024 Best Artifact paper [ALP](https://dl.acm.org/doi/10.1145/3626717), providing high-performance unified generic interfaces for both `f64` and `f32` streams.
 
 <p align="center">
-  <img src="https://fastly.jsdelivr.net/gh/webc-fs/-@Lr/3nCyOwmREyprSiLlqsrA.svg" alt="fastalp Floating-Point Compression Performance & Ratio Benchmark" width="100%">
+  <img src="https://fastly.jsdelivr.net/gh/webc-fs/-@e3/K1KOZ4aFcUvbP7cGoTRQ.svg" alt="fastalp Floating-Point Compression Performance & Ratio Benchmark" width="100%">
   <br>
   <sub><b>Benchmark Environment</b>: CPU: Apple M2 Max (12 Cores) ｜ OS: macOS 26.5.1 ｜ Toolchain: Rust 1.100.0-nightly / Clang (-O3)</sub>
 </p>
@@ -116,13 +116,28 @@ Due to the IEEE 754 layout of exponents and mantissas, general-purpose byte comp
 - **Intelligent Outlier Pruning for Sparse Constants (0-bit Encoding)**:<br>
   Isolates sparse impulse spikes to the exception dictionary, allowing base streams to drop to 0-bit width and delivering 150x ~ 744x compression ratios on constant-heavy series.
 
+- **Dual-Stage Dynamic Outlier Budget Relaxation (16 to 32)**:<br>
+  Pre-prunes with a tight 16-exception ceiling to preserve Delta candidates, then relaxes exclusively to a 32-exception budget in FOR mode to crush long-tail spike bit-widths, with base-restoration purging delta artifacts.
+
 - **Previous-Value Exception Backfilling**:<br>
   Backfills exception slots with preceding integers to prevent artificial gradient spikes in difference encoding.
 
 - **Hardware-Native Round-Ties-Even (`round_ties_even`)**:<br>
   Replaces the legacy IEEE 754 magic number offset (`0x0018000000000000`, limited to $[-2^{51}, 2^{51}]$) with direct hardware round-to-nearest-even instructions (x86 `ROUNDSD` / ARM64 `FRINTN`), guaranteeing full-range fidelity.
 
-- **2-bit Self-Describing Headers & Arbitrary Array Slicing**:<br>
+- **Branch-Free Repeat Expansion**:<br>
+  Eliminates conditional branch stalls and pipeline bubbles using bitwise state transition invariants, boosting repeat-dense decompression throughput significantly.
+
+- **Fused Single-Pass Consumer & 1-Cycle Dependency Decoupling**:<br>
+  Eliminates 8KB scratch buffers by directly fusing bit-unpacking, prefix-sum recurrence, and float reconstruction into a single register pipeline; decouples recurrence dependencies down to 1 clock cycle.
+
+- **16-Element Wide Word Loading & Full-Bitwidth Const Generics Dispatch**:<br>
+  Performs 16-element ILP loads on small bit-widths (1, 2, 4 bits) with 64-bit word reads; uses compile-time const generics dispatch over all 1~64 bit-widths for 28.0+ GB/s decode throughput.
+
+- **Real Doubles (ALP-RD) Stack-Allocated Decoupling**:<br>
+  Uses stack-allocated open-addressing hash tables with Fibonacci hashing and bitmask scans for zero-heap dictionary construction, and direct 1024-block streaming decode to boost decompression throughput to 11.6+ GB/s.
+
+- **2-bit Self-Describing Headers & Large Slice Streaming**:<br>
   Compact 3-byte headers for full 1024-element blocks and 1-byte headers for raw fallbacks, automatically scaling to 32-bit counts for large slices.
 
 - **12.5% Exception Ceiling & RAW Fallback**:<br>
@@ -132,7 +147,7 @@ Due to the IEEE 754 layout of exponents and mantissas, general-purpose byte comp
   Detects uniform arrays in a single comparison cycle, emitting 1024 uniform items in 11 bytes within 1 clock cycle (744x ratio).
 
 - **Three-Stage Microarchitectural Sampling Pruning**:<br>
-  Replaces unpruned parameter searches with a 3-tier cascade (pure decimal early return, 4/16-sample short-circuiting, and non-decimal abort), boosting end-to-end compression throughput to **3.7 GB/s (4.6x faster than C++ ALP)**; pure encoding kernel throughput reaches **6.0 GB/s (1.10x faster than C++ ALP)**; streaming throughput reaches **15~24+ GB/s** with cached parameters.
+  Replaces unpruned parameter searches with a 3-tier cascade (pure decimal early return, 4/16-sample short-circuiting, and non-decimal abort), boosting end-to-end compression throughput to **1.9 GB/s (2.41x faster than C++ ALP 0.8 GB/s)**; pure encoding kernel throughput reaches **7.1 GB/s (1.35x faster than C++ ALP 5.3 GB/s)**; streaming throughput reaches **15~24+ GB/s** with cached parameters.
 
 
 ## Usage
@@ -312,44 +327,62 @@ for batch in batches {
 
 ```mermaid
 graph TD
-  Input["Input Floating-Point Slice (&[f64] / &[f32])"] --> Sampler["Parameter Sampler<br/>Determine optimal (exp, fac) via cost model"]
-  Sampler --> Encoder["Lossless Integer Conversion<br/>Scaled rounding & bit-exact validation"]
-  Encoder --> Split{"Losslessly Encodable?"}
-  Split -- Yes --> IntStream["FOR Base Subtraction<br/>Calculate non-negative offsets"]
-  Split -- No --> ExcStream["Exception Recording<br/>Store index positions & raw IEEE 754 bits"]
-  IntStream --> Bitpacker["Dense Bitpacking<br/>Pack at dynamic bit-width"]
-  ExcStream --> Frame["Binary Frame Assembly<br/>Header + Base + Bitstream + Exception List"]
-  Bitpacker --> Frame
-  Frame --> Output["Compressed Payload (Vec<u8>)"]
+  Input["Input Floating-Point Slice (&[f64] / &[f32])"] --> Identical{"Single Comparison Equi-Probe"}
+  Identical -- Identical Series --> FastConst["11-Byte Ultra-Fast Constant Frame (Up to 744x)"]
+  Identical -- Normal Series --> Sampler["Three-Stage Cascade Sampler<br/>Decimal Early Exit / 4-Sample Pruning / High-Entropy Abort"]
+  Sampler --> NegCheck{"Exceptions > 12.5% or High-Entropy"}
+  NegCheck -- Yes --> RawFrame["1-Byte Header RAW Compact Fallback Frame (Zero Expansion)"]
+  NegCheck -- No --> SimdKernel["4-way SIMD Vectorized Integer Mapping<br/>Native Round-Ties-Even + Adaptive Mul/Div"]
+  SimdKernel --> DiffPrune["Dual-Stage Dynamic Outlier Pruning<br/>16-Exception Delta Shield / 32-Exception FOR Release"]
+  DiffPrune --> DeltaJudge{"16-Sample Mathematical Short-Circuit Delta Check"}
+  DeltaJudge -- Delta Better --> DeltaPack["Delta Mode: Preceding Backfill + 8-Way Register Delta Packing"]
+  DeltaJudge -- FOR Better --> ForPack["FOR Mode: Base Purge + Frame-of-Reference Packing"]
+  DeltaPack --> FrameAssemble["Self-Describing Binary Frame Assembly<br/>2-bit Length Tag + 3-Byte Full Header + Exceptions"]
+  ForPack --> FrameAssemble
+  FastConst --> Output["Compact Compressed Binary Stream"]
+  RawFrame --> Output
+  FrameAssemble --> Output
 ```
 
 ### Compression Pipeline
 
 - **Equi-value Detection & Fallback (`encoder.rs`)**:<br>
-  Fast-path detection for constant sequences. Direct emission of compact headers when identical values are observed. Automatically falls back to raw 1-byte header storage if data entropy prevents effective decimal reduction.
+  Single-cycle branchless check (`slice[1] == slice[0]`) to detect constant sequences; emits 1024 uniform elements in 11 bytes (744x ratio). Automatically reverts to 1-byte RAW fallback if data entropy exceeds 12.5% exception ceiling to prevent negative compression.
 
-- **Sampling & Cost-Model Optimization (`sampler.rs`)**:<br>
-  Evaluates up to 32 evenly distributed sample points across `(exp, fac)` parameter spaces, minimizing total encoded bit-width and penalty-weighted exceptions.
+- **Three-Stage Cascade Parameter Sampling (`sampler.rs`)**:<br>
+  Replaces unpruned 190-combination searches: Stage 1 tests pure decimal multiplication on high-frequency exponents with a 6-sample zero-exception fast-return; Stage 2 rapidly weeds out unpromising candidate factors using 4-sample probes; Stage 3 aborts immediately on non-decimal high-entropy data.
 
-- **Lossless Conversion & Validation (`sampler.rs`, `float.rs`)**:<br>
-  Multiplies floats by $10^{\text{exp}} \times 10^{-\text{fac}}$, rounds to nearest integer via floating-point bias constants, and validates bit-exact equality through inverse scaling.
+- **4-way Unrolled SIMD Mapping & Decimal Division (`kernel.rs`, `float/`)**:<br>
+  Utilizes hardware-native round-ties-even instructions (ARM64 `FRINTN` / x86 `ROUNDSD`), eliminating legacy magic-number overflow. Dynamically triggers decimal division (`use_div`) to eliminate 1-ULP multiplication truncation errors. Simultaneously tracks extremum reduction trees and probes for zero block exceptions in a single pass.
 
-- **Base Subtraction & Bitpacking (`bitpack/pack.rs`, `encoder.rs`)**:<br>
-  Computes minimum valid integer as frame base (FOR mode), derives dynamic bit-widths, and densely packs offsets into bytes using a 128-bit sliding accumulator.
+- **Dual-Stage Dynamic Outlier Pruning (`outlier.rs`, `engine.rs`)**:<br>
+  Constrains exception budget to 16 during pre-pruning to shield Delta candidates, then relaxes exclusively to 32 in FOR mode to crush long-tail spike bit-widths; restores base values prior to FOR pruning to purge Delta backfill artifacts.
 
-- **Exception Stream Serialization (`encoder.rs`)**:<br>
-  Unencodable float positions and raw IEEE 754 bit representations are recorded in a compact trailing exception table.
+- **Adaptive Delta Difference & Short-Circuit Check (`delta/`, `encoder/delta.rs`)**:<br>
+  Probes first 16 samples to mathematically prove whether difference bit-width can beat FOR mode, short-circuiting in under 10ns; backfills preceding integers at exception slots; packs differences in 8-way fused register pipelines with zero memory roundtrips.
+
+- **Full-Bitwidth Const Generics Bitpacking (`bitpack/pack.rs`)**:<br>
+  Leverages 8-element periodic invariant (8 elements strictly consume $BW$ bytes) through `match_pack_32!` dispatch; special-cases 52-bit double pairs and 56-bit 7-byte direct stores.
 
 ### Decompression Pipeline
 
-- **Self-Describing Header Parsing (`header.rs`, `decoder.rs`)**:<br>
-  Parses the 2-bit length flag, extracts metadata parameters `(exp, fac, bit_width)`, and recovers the frame base value.
+- **Self-Describing Header Parsing (`header.rs`)**:<br>
+  Reads 1-byte descriptor with 2-bit length tag (1024-element full block, u8, u16, u32 length tiers), natively streaming arbitrary array slices; 3-byte header for full blocks, 1-byte header for RAW fallbacks.
 
-- **Bitstream Unpacking (`bitpack/unpack.rs`)**:<br>
-  Employs pure SIMD register pipelines for 8/16/32/64 bit widths to avoid gather and memory lookup latency, combined with stack-resident LUTs for narrow widths (1/2/4 bit).
+- **Fused Single-Pass Consumer & 1-Cycle Recurrence Decoupling (`bitpack/unpack/`)**:<br>
+  Eliminates 8KB scratch buffers by decoupling decoding into `AlpConsumer` single-pass pipelines. Bit-unpacking, FOR base addition, or prefix-sum recurrence and float reconstruction happen directly in registers; shrinks cross-iteration loop dependencies to 1 clock cycle for 18 ~ 28 GB/s delta decompression.
 
-- **Exception Patching (`decoder.rs`)**:<br>
-  Applies trailing exceptions at specified index offsets, restoring non-finite and out-of-range floats bit-for-bit.
+- **16-Element Wide Word Loading & L1D Local Tables (`kernel.rs`, `decoder.rs`)**:<br>
+  Unpacks 16 elements per 64-bit load on narrow bit-widths (1, 2, 4 bits) using `write_16!`; accelerates decimal division and narrow widths with 256-entry stack-resident L1D lookup tables.
+
+- **Branch-Free Repeat Expansion (`decoder/mod.rs`)**:<br>
+  Applies bitwise state transition invariants to eliminate all conditional branches and pipeline stalls during repeat expansion; triggers 64-element native SIMD copies/broadcasts on full-zero/full-one words.
+
+- **Real Doubles (ALP-RD) Direct Streaming Decode (`decoder/standard.rs`, `rd.rs`)**:<br>
+  Streams unpacked low-bit mantissas directly to destination pointers, followed by in-place bitwise-OR dictionary merging, boosting decompression throughput to 11.6+ GB/s.
+
+- **In-Place Exception Patching (`decoder/mod.rs`)**:<br>
+  Directly restores exact IEEE 754 bit representations at recorded exception indices without buffer reallocation.
 
 ---
 
@@ -374,7 +407,7 @@ fastalp/
 ├── src/                # Library source code
 │   ├── bitpack/        # Modular bit-level packing and unpacking
 │   │   ├── mod.rs      # Module facade and re-exports
-│   │   ├── pack.rs     # Dense bitpacking with match_pack_23 dispatch
+│   │   ├── pack.rs     # Dense bitpacking with match_pack_32 dispatch
 │   │   └── unpack/     # Decoupled bit-unpacking engine
 │   │       ├── mod.rs      # Top-level dispatch and safe facades
 │   │       ├── consumer.rs # AlpConsumer abstraction (FOR/Delta prefix-sum/raw writes)
@@ -396,7 +429,9 @@ fastalp/
 │   │   ├── outlier.rs  # FOR-mode outlier pruning algorithm
 │   │   ├── exception.rs# Exception layout and compact serialization
 │   │   ├── standard.rs # Standard FOR frame assembly
-│   │   └── delta.rs    # Delta difference frame assembly
+│   │   ├── delta.rs    # Delta difference frame assembly
+│   │   ├── dict.rs     # Sparse constant and impulse dictionary encoding
+│   │   └── rd.rs       # Real Doubles (ALP-RD) stack hash construction
 │   ├── error.rs        # Error definitions and Result type aliases
 │   ├── float/          # AlpFloat trait and generic lossless transformations
 │   │   ├── mod.rs      # AlpFloat trait and lookup table builders
@@ -535,8 +570,20 @@ Evaluated on all 31 public datasets from the original ALP paper plus 6 represent
 - **Intelligent Outlier Pruning & 0-bit Sparse Encoding**:
   For datasets where 99% of values are constant with rare isolated pulses, `fastalp` strips outliers into the exception dictionary, allowing the main bitstream to drop to 0-bit. Delivers compression ratios exceeding 150x ~ 744x.
 
-- **Exception Previous-Value Backfill**:
-  Backfills exceptions with previous integer values to prevent artificial gradient steps that corrupt delta difference bit-widths.
+- **Dual-Stage Dynamic Outlier Pruning & Budget Relaxation (16 to 32)**:
+  Solves the trade-off between shielding Delta candidates and maximizing FOR compression. Pre-pruning enforces a strict 16-exception budget to preserve Delta eligibility. Once FOR mode is chosen, the exception budget relaxes to 32 to aggressively narrow long-tail spike bit-widths. Atomically resets exception locations to the base value prior to FOR pruning to purge Delta backfill artifacts, preventing histogram double counting.
+
+- **Previous-Value Exception Backfilling**:
+  Backfills exceptions with preceding integers to prevent artificial gradient steps that corrupt delta difference bit-widths.
+
+- **Four-Step Recurrence Delta Tree & 1-Cycle Dependency Decoupling**:
+  Precomputes minimal delta step vectors to decompose sequential prefix-sum dependencies into isomorphic four-element balanced binary trees. Decouples the running accumulator from the 8-element delta sum, slashing cross-batch loop dependency latency to a single clock cycle and accelerating delta decompression to 18 ~ 28 GB/s.
+
+- **16-Element Wide Word Loading & Instruction-Level Parallelism**:
+  Extends narrow unpacking kernels (1, 2, 4 bits) with 16-element dual unrolling (`unroll_16!`, `write_16!`), reading 16 elements per 64-bit load to saturate modern superscalar execution units.
+
+- **Branch-Free Repeat Expansion**:
+  Applies bitwise state transition invariants to eliminate all conditional branches and pipeline stalls during repeat expansion; triggers 64-element native SIMD copies/broadcasts on full-zero/full-one words, boosting repeat-dense decompression throughput significantly.
 
 - **2-bit Self-Describing Headers & Arbitrary Length Support**:
   Employs a 2-bit length tag: standard 1024-element frames require only 3 bytes of header, while RAW fallback frames require 1 byte. Automatically scales to 32-bit offsets for arrays exceeding 65,535 elements.
@@ -548,7 +595,7 @@ Evaluated on all 31 public datasets from the original ALP paper plus 6 represent
   Checks `slice[1] == slice[0]` on block entry; non-constant streams exit in 1 CPU cycle, while constant sequences encode 1024 elements into 11 bytes (744x ratio).
 
 - **Three-Stage Microarchitectural Pruning Pipeline**:
-  Replaces unpruned parameter searches with a 3-tier cascade (pure decimal early return, 4/16-sample short-circuiting, and non-decimal abort), boosting end-to-end compression throughput from 0.80 GB/s to **3.7 GB/s** (4.6x geometric mean speedup, up to 7.0x in specific datasets); pure encoding kernel throughput reaches **6.0 GB/s (1.10x faster than C++ ALP)**; streaming throughput reaches **15~24+ GB/s** with cached parameters.
+  Replaces unpruned parameter searches with a 3-tier cascade (pure decimal early return, 4/16-sample short-circuiting, and non-decimal abort), boosting end-to-end compression throughput from 0.8 GB/s to **1.9 GB/s** (2.41x faster than C++ ALP); pure encoding kernel throughput reaches **7.1 GB/s (1.35x faster than C++ ALP 5.3 GB/s)**; streaming throughput reaches **15~24+ GB/s** with cached parameters.
 
 - **Pure Register SIMD Decompression**:
   Vectorizes common bit-widths (8, 16, 32, 64) into branchless register pipelines, achieving **27.0 GB/s** geometric mean decompression throughput (surpassing C++ ALP's 20.0 GB/s, 1.35x faster).
@@ -614,7 +661,7 @@ Enable the feature in `Cargo.toml`:
 
 ```toml
 [dependencies]
-fastalp = { version = "0.1.42", features = ["capi"] }
+fastalp = { version = "0.1.46", features = ["capi"] }
 ```
 
 Build standalone static libraries (`libfastalp.a`) or shared libraries (`libfastalp.so` / `libfastalp.dylib`):
@@ -719,7 +766,7 @@ Designed for worker-pool architectures and per-column isolated states:
 纯 Rust 实现的自适应无损浮点数压缩算法库，深度吸收并拓展了 ACM SIGMOD 2024 最佳 Artifact 论文 [ALP](https://dl.acm.org/doi/10.1145/3626717) 的理论体系，通过统一泛型接口提供对 `f64` 与 `f32` 数据流的高性能压缩与解压。
 
 <p align="center">
-  <img src="https://fastly.jsdelivr.net/gh/webc-fs/-@Es/h_YtuyLjSr7kfwjpH-ag.svg" alt="fastalp 浮点压缩算法全量性能与压缩比横向对比" width="100%">
+  <img src="https://fastly.jsdelivr.net/gh/webc-fs/-@q7/BdRzV2GYB8iwGAQaGSsw.svg" alt="fastalp 浮点压缩算法全量性能与压缩比横向对比" width="100%">
   <br>
   <sub><b>评测环境</b>: 芯片: Apple M2 Max (12 核) ｜ 环境: macOS 26.5.1 ｜ 工具链: Rust 1.100.0-nightly / Clang (-O3)</sub>
 </p>
@@ -728,7 +775,7 @@ Designed for worker-pool architectures and per-column isolated states:
 
 - [理论背景与官方论文](#理论背景与官方论文)
 - [功能特性](#功能特性)
-  - [针对 C++ 官方实现（`cwida/ALP`）的核心算法与架构升级](#针对-c-官方实现cwidaalp的核心算法与架构升级)
+  - [针对 C++ 官方实现的核心算法与架构升级](#针对-c-官方实现的核心算法与架构升级)
 - [使用示例](#使用示例)
   - [添加依赖](#添加依赖)
   - [基础压缩与解压](#基础压缩与解压)
@@ -804,46 +851,62 @@ ALP（Adaptive Lossless Floating-Point Compression）是由荷兰国家数学与
 - **零额外堆内存分配**：<br>
   提供 `_into` 系列接口及 FFI 裸指针直出接口，支持调用方就地复用预分配缓冲区，规避内存分配与 GC 抖动。
 
-### 针对 C++ 官方实现（`cwida/ALP`）的核心算法与架构升级
+### 针对 C++ 官方实现的核心算法与架构升级
 
-对照 C++ 官方原版的实现，原版仅支持固定 1024 满块、依赖 FastLanes FFOR 静态全局基准消除、使用浮点乘法截断缩放，且缺乏自包含二进制序列化格式与采样剪枝。<br>
-`fastalp` 结合底层时序特征与现代硬件微架构，做出了关键性创新与工程突破：
+对照 C++ 官方原版实现，原版仅支持固定 1024 满块、依赖 FastLanes FFOR 静态全局基准消除、采用浮点乘法截断逆缩放，且缺乏自包含线缆格式与采样剪枝。<br>
+`fastalp` 结合工业时序特征与现代硬件微架构，实现了关键性算法创新与工程架构突破：
 
-- **自适应时序差分（Adaptive Delta-ALP）**：<br>
-  原版实现仅支持静态全局最小值基准消除（`analyze_ffor`），平滑时序物理波形（气象、水文、工业传感器）虽然相邻差值极小，但全局极值跨度大导致位宽冗余。<br>
-  `fastalp` 引入相邻一阶差分与前缀和递推机制，配合前置 16 采样数学短路快筛（局部差分极值不优即瞬时早停），自适应收窄动态位宽 15% ~ 38%。
+- **自适应时序差分**：<br>
+  原版仅支持静态全局最小值基准消除，平滑时序物理波形（气象、水文、工业传感器）虽相邻差值极小，但全局极值漂移导致基准位宽偏宽。<br>
+  `fastalp` 引入自适应一阶差分与前缀和递推，配合前置 16 采样数学短路快筛（局部差分极值不优即瞬时早停），自适应收窄动态位宽 15% ~ 38%。
 
-- **十进制精确除法重构（`use_div` 模式）**：<br>
-  原版实现仅采用浮点乘法反向缩放（`* Constants<PT>::FRAC_ARR`），受 IEEE 754 浮点乘法（如 `* 0.1`）无限循环二进制尾数截断误差影响，产生大量误判的虚假异常点（每点需额外消耗 80~128 位存储）。<br>
+- **十进制精确除法重构**：<br>
+  原版仅采用浮点乘法反向缩放，受 IEEE 754 乘法（如 `* 0.1`）无限循环二进制尾数截断误差影响，产生大量误判的虚假异常点（每点需额外消耗 80~128 位存储）。<br>
   `fastalp` 引入十进制精确除法重构模式，将观测时序中因乘法舍入截断造成的虚假异常直接归零，数据点存储体积降低 20% ~ 38%。
 
-- **智能离群点剪枝与稀疏常数压缩（0-bit 编码）**：<br>
-  原版缺乏离群值剥离机制，当数据块中 99% 为常数或零值但偶发出现单点突变脉冲时，全局位宽被迫按脉冲极值全量膨胀。<br>
-  `fastalp` 引入离群值剪枝算法，自动将孤立脉冲剥离至异常流，主位流降至 0 位（仅存基准值，位流零字节占用），稀疏突变时序压缩比突破 150x ~ 744x。
+- **双级动态离群点剪枝与 16 至 32 预算放宽**：<br>
+  原版缺乏离群值剥离机制，单点突变脉冲会导致全局位宽全量膨胀。<br>
+  `fastalp` 研发动态离群值剪枝算法：前置预剪枝将预算严格限制在 16 个以保护差分模式；在确定进入基准值模式后独占放宽至 32 个预算，深层压榨长尾尖峰位宽；配合 FOR 模式异常基准重置，彻底清洗差分回填污染，稀疏常数序列压缩比突破 150x ~ 744x。
 
 - **异常点前值回填平滑机制**：<br>
-  原版将异常点覆盖为固定的全局首个有效值，在时序差分模式下会引起前后相邻元素人工阶跃跳变，导致差分位宽急剧发散。<br>
+  原版将异常点覆盖为固定的全局首个有效值，在时序差分模式下会引起人工阶跃尖峰，导致差分位宽急剧发散。<br>
   `fastalp` 在差分与位打包前，将异常点自动用前一个有效整型值回填，消除人为差分抖动，保障差分压缩位宽保持极窄状态。
 
-- **硬件原生偶数舍入（`round_ties_even` 替代 Magic Number）**：<br>
-  原版采用 IEEE 754 常数偏置 Magic Number（`0x0018000000000000`）在浮点单元内加减模拟舍入，受限于 $[-2^{51}, 2^{51}]$ 取值范围；<br>
-  `fastalp` 采用硬件加速的向偶数舍入指令（直接映射至 x86 `ROUNDSD` 与 ARM64 `FRINTN`），消除了取值范围溢出风险，确保全域数值严格无损。
+- **硬件原生偶数舍入**：<br>
+  原版采用 IEEE 754 常数偏置加减模拟向偶数舍入，取值范围受限于 $[-2^{51}, 2^{51}]$；<br>
+  `fastalp` 采用硬件原生向偶数舍入指令（直接映射至 ARM64 `FRINTN` 与 x86 `ROUNDSD`），消除取值范围溢出风险，确保全域数值严格无损。
 
-- **紧凑自描述头与超大数组原生支持**：<br>
-  原版硬编码 1024 元素固定长度且缺乏自包含二进制序列化格式，最后不足 1024 元素的尾部向量需补零或二次编码填充，无法原生编码变长或超大数组。<br>
+- **时序游程重复无分支展开**：<br>
+  原版不支持重复压缩，遇到密集交替重复时序会产生大量条件分支预测失败与流水线气泡。<br>
+  `fastalp` 证明并应用位图状态转移恒等式，将重复展开彻底消除为单周期位运算与指针直写，配合 64 元素原生 SIMD 广播写，解压吞吐大幅飙升。
+
+- **单趟解包消费器融合与单周期循环依赖解耦**：<br>
+  原版及传统实现需将位解包写入 8KB 临时栈缓冲、再单独循环计算前缀和或重构浮点数，存在双重内存往返延迟。<br>
+  `fastalp` 抽象出单态化消费器范式，在位解包内核循环体内直接原位累加并转换浮点数；将跨 8 元素前缀和循环依赖关键路径由 2 周期压至 1 周期，差分数据集解压吞吐跃升至 18 ~ 28 GB/s。
+
+- **低位宽 16 元素宽加载与全位宽常量派发**：<br>
+  原版依赖巨型代码生成文件且缺乏细粒度指令级并行优化。<br>
+  `fastalp` 在 1、2、4 位小位宽解包内核中实现 16 元素指令级并行（ILP）双倍展开，单次 64 位读取直解 16 个元素；基于 8 元周期数学定理实现覆盖 1 至 64 全位宽的编译期常量单态化分发体系，解压吞吐达 28.0+ GB/s。
+
+- **真实双精度高低位解耦全栈重构**：<br>
+  原版针对高熵科学浮点数在堆上频繁构造哈希表与排序，编码逐点哈希查找，解码需 10KB 中间缓冲双重切片遍历。<br>
+  `fastalp` 采用栈上 256 项开放寻址哈希表结合 Fibonacci 哈希与位图遍历筛选 top 8 字典项，全过程零堆分配；解码端重构为 1024 块级直通流式解码，原地原位位或合并，解码吞吐从 3.7 GB/s 暴增至 11.6+ GB/s。
+
+- **紧凑自描述头与超大数组原生流式支持**：<br>
+  原版硬编码 1024 元素固定长度且缺乏自包含二进制序列化格式，尾部向量需二次填充补零。<br>
   `fastalp` 采用 2-bit 长度标签自描述格式，标准 1024 满块头仅占 3 字节，RAW 保底模式仅占 1 字节；支持超过 65,535 元素的超大数组自动升级为 32 位数量与异常偏移，单帧无损流式序列化。
 
-- **12.5% 异常上限与单字节 RAW 保底回退**：<br>
+- **12.5% 异常上限与单字节保底回退**：<br>
   原版对不可压缩的高熵随机浮点数缺乏严格的负压缩防护，编码后体积膨胀 1.5x ~ 2x；<br>
   `fastalp` 设定 12.5% 异常上限与体积实时评估，一旦探测到负压缩立即回退至 1 字节头的 RAW 原始数据流，从机制上杜绝空间膨胀。
 
 - **单次比较全等快跳**：<br>
-  面对工业设备待机、传感器断线与心跳常数流，原版仍需执行完整的采样、FFOR 分析与位打包循环；<br>
+  面对工业设备待机与传感器心跳常数流，原版仍需执行完整的采样、FFOR 分析与位打包循环；<br>
   `fastalp` 在编码入口仅用 1 次比对判定全等常数序列，1 个 CPU 时钟周期内完成识别，1024 元素以 11 字节瞬时输出（压缩比达 744x）。
 
 - **三级级联微架构采样剪枝**：<br>
-  原版 `init` 采用全量暴力穷举，采样耗时占全流程 80% 以上，导致端到端压缩吞吐仅约 0.80 GB/s；<br>
-  `fastalp` 采用纯十进制早停、4 样本短路快筛和非十进制熔断的三级剪枝流水线，将端到端压缩吞吐提升至 **3.7 GB/s（提速 4.6x）**；在压缩纯编码吞吐（不含采样）口径下达 **6.0 GB/s（较 C++ 快 1.10x）**；在命中状态化参数缓存时，流式参数缓存吞吐可达 **15~24+ GB/s**。
+  原版采样采用全量暴力穷举，采样耗时占全流程 80% 以上，导致端到端压缩吞吐仅约 0.8 GB/s；<br>
+  `fastalp` 采用纯十进制早停、4 样本短路快筛和非十进制熔断的三级剪枝流水线，将端到端压缩吞吐提升至 **1.9 GB/s（较原版提速 2.41x）**；在纯编码吞吐（不含采样）口径下达 **7.1 GB/s（较原版快 1.35x）**；在命中状态化参数缓存时，流式参数缓存吞吐可达 **15~24+ GB/s**。
 
 
 ## 使用示例
@@ -1023,49 +1086,65 @@ for batch in batches {
 
 ```mermaid
 graph TD
-  Input["输入浮点数切片 (&[f64] / &[f32])"] --> Sampler["参数采样器<br/>评估代价模型并推导最优 (exp, fac)"]
-  Sampler --> Encoder["无损整型编码<br/>快速常量舍入与位精确校验"]
-  Encoder --> Split{"是否支持无损编码"}
-  Split -- 是 --> IntStream["FOR 基准值消除<br/>计算非负整型偏移量"]
-  Split -- 否 --> ExcStream["异常值记录<br/>存储索引位置与 IEEE 754 原始位"]
-  IntStream --> Bitpacker["密集位打包<br/>按动态位宽打包进字节流"]
-  ExcStream --> Frame["二进制帧封装<br/>包头 + 基准值 + 位流 + 异常值列表"]
-  Bitpacker --> Frame
-  Frame --> Output["压缩字节负载 (Vec<u8>)"]
+  Input["输入浮点数切片 (&[f64] / &[f32])"] --> Identical{"单次比对全等探测"}
+  Identical -- 全等序列 --> FastConst["11 字节极速常数帧 (最高 744x)"]
+  Identical -- 普通序列 --> Sampler["三级级联采样器<br/>纯十进制快筛 / 4 样本淘汰 / 高熵早停"]
+  Sampler --> NegCheck{"异常率 > 12.5% 或高熵"}
+  NegCheck -- 是 --> RawFrame["单字节头 RAW 紧凑保底帧 (零膨胀)"]
+  NegCheck -- 否 --> SimdKernel["4-way SIMD 向量化整型映射<br/>原生偶数舍入 + 乘除模式自适应"]
+  SimdKernel --> DiffPrune["双级动态离群点剪枝<br/>前置 16 预算保护 / FOR 独占放宽至 32"]
+  DiffPrune --> DeltaJudge{"前置 16 点数学短路差分评估"}
+  DeltaJudge -- 差分更优 --> DeltaPack["Delta 模式：异常点前值回填 + 8 路寄存器差分打包"]
+  DeltaJudge -- FOR 更优 --> ForPack["FOR 模式：异常基准清洗 + 最小值消除位打包"]
+  DeltaPack --> FrameAssemble["自描述二进制帧封装<br/>2-bit 长度标签 + 3 字节满块头 + 异常流"]
+  ForPack --> FrameAssemble
+  FastConst --> Output["紧凑压缩二进制流"]
+  RawFrame --> Output
+  FrameAssemble --> Output
 ```
 
 ### 压缩流程
 
-- **全等探测与保底分流 (`encoder.rs`)**：<br>
-  先对数据进行常数序列快速校验；若全等且可编码，直接写入自描述紧凑头部与基准值；<br>
-  若为不可压缩随机数据且编码体积超过原始大小加上极简头部，则自动回退至原始保底模式（1024 满块仅 1 字节头部），直接以原始字节流存储。
+- **单次比较全等快跳与保底分流 (`encoder.rs`)**：<br>
+  在编码入口仅用 1 次 `slice[1] == slice[0]` 快速比对，1 个时钟周期完成非全等流判别；全等序列仅需 11 字节即可压缩 1024 元素（压缩比高达 744x）；<br>
+  设定 12.5% 异常上限门限，高熵随机浮点数在探测到负压缩时立即直降单字节头部的 RAW 紧凑保底模式，彻底杜绝数据膨胀。
 
-- **采样评估 (`sampler.rs`)**：<br>
-  在数据序列中均匀采样至多 32 个数值，遍历 `(exp, fac)` 参数组合，<br>
-  选取使得 `位宽 * 样本量 + 异常数 * 惩罚权重` 最小的参数组合。
+- **三级级联微架构采样 (`sampler.rs`)**：<br>
+  颠覆原版 $190 \times 32$ 次暴力枚举：第 1 级按经验高频分布（2, 1, 3, 0..）优先试探纯十进制乘法，结合 6 样本快筛零异常即刻返回；第 2 级在候选因子评估中以 4 样本快速淘汰高异常项；第 3 级非十进制特征即刻熔断。采样吞吐提升 4.6x 以上。
 
-- **无损转换与验证 (`sampler.rs`, `float.rs`)**：<br>
-  将浮点数乘以 $10^{\text{exp}} \times 10^{-\text{fac}}$，利用常量完成快速向近舍入并转换为整型，<br>
-  再通过反向整型乘法与逆缩放验证浮点位级一致性。
+- **4-way 展开向量化整型映射与十进制除法 (`kernel.rs`, `float/`)**：<br>
+  基于 `fearless-simd` 实现目标硬件原生单指令偶数舍入（ARM64 `FRINTN` / x86 `ROUNDSD`），消除 Magic Number 取值范围溢出；<br>
+  针对 IEEE 754 乘法截断误差，动态启用十进制精确除法重构（`use_div`），虚假异常直接归零；4-way ILP 展开单趟同步维护极值规约树并探测全块零异常。
 
-- **基准消除与位打包 (`bitpack/pack.rs`, `encoder.rs`)**：<br>
-  获取有效整型中的最小值作为基准值，计算偏移量并获取所需位宽，<br>
-  利用 128 位寄存器滑动窗口将数值紧凑打包入字节流。
+- **双级动态离群点剪枝与差分清洗 (`outlier.rs`, `engine.rs`)**：<br>
+  前置预剪枝将预算严格控制在 16 个以保护时序差分；在判定进入 FOR 模式后独占放宽至 32 个预算，连续降序探索候选位宽，深层收窄带尖峰长尾数据位宽；在 FOR 剪枝前原子恢复基准值，消除 Delta 回填引入的 `patch_val` 污染。
 
-- **异常流序列化 (`encoder.rs`)**：<br>
-  无法无损转换的浮点数按索引位置与 IEEE 754 原始位记录于尾部异常表中。
+- **自适应一阶差分与数学短路快筛 (`delta/`, `encoder/delta.rs`)**：<br>
+  基于局部子集极值跨度定理，仅取前 16 采样项对比差分与基准位宽，不优即刻短路跳出；差分模式下将异常点用前值回填消除人工阶跃跳变；采用 8 路寄存器级熔合差分位打包，零临时内存回写。
+
+- **全位宽常量单态化打包 (`bitpack/pack.rs`)**：<br>
+  基于 8 元周期数学定理（每 8 个元素严格占据 $BW$ 整字节），通过 `match_pack_32!` 将 1 至 32 位宽常量展开；针对 52 位与 56 位专门优化双元素与 7 字节宽字直写，实现最高吞吐位打包。
 
 ### 解压流程
 
-- **自描述头解析 (`header.rs`, `decoder.rs`)**：<br>
-  读取首字节描述符，由 2-bit 长度标签解码元素总数并确定参数偏移；<br>
-  若类型为原始保底数据，通过内存复制直出恢复；若为 ALP 压缩数据，提取 `(exp, fac, bit_width)` 缩放参数与基准值。
+- **自描述极简头解析 (`header.rs`)**：<br>
+  首字节读取自描述描述符，由 2-bit 长度标签直接解析出元素总数（支持 1024 满块、u8、u16、u32 长度档位），支持无界超大数组原生流式解析；标准 1024 满块头仅占 3 字节，RAW 保底模式仅占 1 字节。
 
-- **位流解包与 SIMD 寄存器流水重构 (`bitpack/unpack.rs`)**：<br>
-  针对 8/16/32/64 bit 采用纯寄存器 SIMD 自动向量化计算，消除堆栈查表与内存间接 gather 寻址延迟；针对 1/2/4 bit 采用微型局部表快速还原。
+- **单趟解包消费器融合与前缀和依赖解耦 (`bitpack/unpack/`)**：<br>
+  淘汰原版解包至 8KB 临时栈缓冲、再双重循环遍历内存的传统做法。抽象 `AlpConsumer` 单态化流水线，在位解包内核循环体内直接原位完成 FOR 消除或差分前缀和累加，并直接转换浮点数写入目标内存，全过程零中间内存分配与重读；<br>
+  在差分消费器中将跨 8 元素循环依赖时延压至 1 周期，平滑时序差分解码吞吐达 18 ~ 28 GB/s。
 
-- **异常值覆盖 (`decoder.rs`)**：<br>
-  若存在尾部异常表，读取对应索引位置的数值并覆盖为原始 IEEE 754 浮点值。
+- **低位宽 16 元素宽加载与 L1D 局部查表 (`kernel.rs`, `decoder.rs`)**：<br>
+  在 1、2、4 位小位宽解包中全面推行 16 元素展开，单次 64 位宽字读取直解 16 个元素并 `write_16!`；除法与小位宽模式使用栈上 256 项 L1D 局部查找表，纳秒级命中。
+
+- **时序重复游程无分支展开 (`decoder/mod.rs`)**：<br>
+  应用位图无分支递推恒等式消除全部条件分支与流水线冲刷；全零与全壹字触发 64 元素原生 SIMD 拷贝与广播写，密集重复数据解压吞吐跃升 50% ~ 70%。
+
+- **真实双精度高低位解耦直通解码 (`decoder/standard.rs`, `rd.rs`)**：<br>
+  淘汰旧版微切片与双重缓冲，高位宽尾数直接解包写入目标裸指针内存，高位字典原地原位位或合并，真实双精度解码吞吐突破 11.6+ GB/s。
+
+- **异常值原位精准覆盖 (`decoder/mod.rs`)**：<br>
+  若存在尾部异常流，按记录的原始索引与原始 IEEE 754 位原位精准覆盖，确保数值还原位级无损。
 
 ---
 
@@ -1090,7 +1169,7 @@ fastalp/
 ├── src/                # 核心源代码
 │   ├── bitpack/        # 模块化位打包与位解包
 │   │   ├── mod.rs      # 门面导出
-│   │   ├── pack.rs     # 128 位累加器位打包算子与 match_pack_23 派发
+│   │   ├── pack.rs     # 128 位累加器位打包算子与 match_pack_32 派发
 │   │   └── unpack/     # 模块化分层位解包算子体系
 │   │       ├── mod.rs      # 解包顶层调度与安全门面
 │   │       ├── consumer.rs # AlpConsumer 消费器抽象（FOR/Delta前缀和/原始写入）
@@ -1112,7 +1191,9 @@ fastalp/
 │   │   ├── outlier.rs  # FOR 模式离群值剪枝算法
 │   │   ├── exception.rs# 异常值结构与紧凑序列化
 │   │   ├── standard.rs # 标准 FOR 编码组装
-│   │   └── delta.rs    # Delta 一阶差分编码组装
+│   │   ├── delta.rs    # Delta 一阶差分编码组装
+│   │   ├── dict.rs     # 稀疏常数与脉冲离群值字典编码
+│   │   └── rd.rs       # 真实双精度（RD）高低位解耦与全栈哈希构建
 │   ├── error.rs        # 错误枚举定义与 Result 类型别名
 │   ├── float/          # AlpFloat 浮点抽象特征与泛型无损转换
 │   │   ├── mod.rs      # AlpFloat trait 定义与查表构建
@@ -1272,19 +1353,19 @@ fastalp 并非简单的语言转译，而是在完整吸收 C++ ALP 论文精髓
 
 - **两级采样与自适应十进制推导**：<br>
   用于自适应推导使编码位宽与异常代价综合最小的十进制缩放参数 `(exp, fac)`。<br>
-  完整继承并实现了原版 ALP 的两级采样架构思想：通过第一级粗粒度快速采样筛选高频候选组合，第二级细粒度向量采样精确定位最优指数与因子。
+  完整继承并实现了原版两级采样架构思想：通过第一级粗粒度快速采样筛选高频候选组合，第二级细粒度采样精确定位最优指数与因子。
 
 - **快速浮点整型舍入与向偶数舍入设计**：<br>
-  用于在浮点寄存器内无损完成紧凑整型化转换并避免分支预测惩罚。<br>
-  原版 ALP 利用 IEEE 754 双精度浮点常数偏置 `0x0018000000000000`（单精度 `12582912.0`），通过加减偏置在浮点单元内一步完成舍入；fastalp 深入研究其取值受限缺点（取值受限于 $[-2^{51}, 2^{51}]$），全面升级为现代硬件原生向偶数舍入指令（ARM64 `FRINTN` / x86 `ROUNDSD`），在保持无分支高吞吐的同时消除了大数值溢出隐患。
+  用于在浮点寄存器内无损完成紧凑整型化转换并规避分支预测惩罚。<br>
+  原版利用 IEEE 754 双精度浮点常数偏置 `0x0018000000000000`（单精度 `12582912.0`），通过加减偏置在浮点单元内一步完成舍入；fastalp 深入分析其取值范围受限于 $[-2^{51}, 2^{51}]$ 的潜在溢出缺陷，全面升级为现代硬件原生向偶数舍入指令（ARM64 `FRINTN` / x86 `ROUNDSD`），在保持无分支高吞吐的同时消除了大数值精度溢出隐患。
 
-- **FOR 帧参考基准值消除**：<br>
+- **基准值消除机制**：<br>
   用于消除整型序列中的偏置偏移量以收敛位打包位宽。<br>
   继承原版的全局最小值消除机制，将有符号整数序列平移为从 0 开始的紧凑非负整数，显著减少位打包所需要的比特数。
 
 - **状态化编码器与跨块参数缓存**：<br>
   用于解决时序数据库连续写入时频繁重复采样的性能瓶颈。<br>
-  在工业时序流中，同一指标列（如温度）相邻数据块的量纲和精度具有高度连续性。fastalp 借鉴 C++ 跨块状态管理思想，支持跨 1024 元素数据块复用上一数据块探测出的指数 `exp` 与因子 `fac`。连续写入时直接跳过全部样本扫描，使连续压缩吞吐由 `4-5 GB/s` 跃升至 `15-24+ GB/s`。
+  在工业时序流中，同一指标列相邻数据块的量纲和精度具有高度连续性。fastalp 借鉴 C++ 跨块状态管理思想，支持跨 1024 元素数据块复用上一数据块探测出的指数 `exp` 与因子 `fac`。连续写入时直接跳过全部样本扫描，使连续压缩吞吐由 4~5 GB/s 跃升至 15~24+ GB/s。
 
 ---
 
@@ -1292,113 +1373,89 @@ fastalp 并非简单的语言转译，而是在完整吸收 C++ ALP 论文精髓
 
 为了突破 C++ 原版的吞吐上限与时序压缩率瓶颈，fastalp 自主研发了以下核心架构优化：
 
-- **自适应时序差分 Delta-ALP**：<br>
+- **自适应时序差分**：<br>
   用于消除平滑物理时序波形大跨度基准导致的冗余位宽。<br>
-  原版实现仅支持静态全局最小值基准消除（FOR 模式），平滑时序物理波形（气象、水文、工业传感器）全局极值跨度大导致位宽偏宽。fastalp 引入相邻一阶差分与前缀和递推机制，配合前置 16 采样数学短路快筛（局部差分极值不优即瞬时早停），自适应收窄动态位宽 15% ~ 38%。
+  原版实现仅支持静态全局最小值基准消除，平滑时序物理波形（气象、水文、工业传感器）全局极值跨度大导致位宽偏宽。fastalp 引入相邻一阶差分与前缀和递推机制，配合前置 16 采样数学短路快筛（局部差分极值不优即瞬时早停），自适应收窄动态位宽 15% ~ 38%。
 
-- **十进制精确除法重构 use_div**：<br>
+- **十进制精确除法重构**：<br>
   用于消除 IEEE 754 乘法舍入误差导致的虚假异常点。<br>
   原版实现仅采用浮点乘法反向缩放，受 IEEE 754 浮点乘法（如 `* 0.1`）无限循环二进制尾数截断误差影响，产生大量误判的虚假异常点（每点需额外消耗 80~128 位存储）。fastalp 引入十进制精确除法重构模式，将观测时序中因乘法舍入截断造成的虚假异常直接归零，数据点存储体积降低 20% ~ 38%。
 
-- **智能离群点剪枝与 0-bit 稀疏常数压缩**：<br>
-  用于针对 99% 为 0.0 仅有极少突变脉冲的数据集（如财政公共支出 `gov30`），实现百倍压缩比。<br>
-  自动将少量脉冲离群值分离到异常字典中，主位流以 0-bit 存储，压缩体积从原版的 2100 字节降至 43 字节（压缩比突破 **150x**）。配合前 16 采样离群点快筛，高熵数据 2 个采样点即刻早停，零额外性能损耗。
+- **双级动态离群点剪枝与预算放宽**：<br>
+  用于解决单点突变脉冲拉大全局位宽与模式冲突的痛点。<br>
+  原版缺乏离群点剪枝机制，数据块中 99% 为常数或零值但偶发出现单点脉冲时位宽全量膨胀。fastalp 独创双级动态预算离群值剪枝：在前置剪枝阶段严格将异常预算限制为 16 个以保护时序差分；在判定不走差分后，独占放宽异常预算至 32 个，深度收窄基准值位宽。带长尾脉冲的数据集（如 `medicare9`）位宽进一步下降，稀疏序列压缩比突破 150x ~ 744x。
+
+- **基准值模式异常重置与差分污染清洗**：<br>
+  用于消除试探差分模式时回填数值对后续离群点直方图的干扰。<br>
+  在进入基准值离群点剪枝前，原子将已有异常点重置为全局基准值，彻底消除试探差分时前驱回填引入的污染，防止直方图统计双重计数与错误短路，保障多轮自适应探索与状态机无开销闭环。
 
 - **异常点前值回填平滑机制**：<br>
   用于消除原版全局固定值回填引发的差分阶跃尖峰与位宽发散。<br>
   原版将异常点覆盖为全局首个非异常值，在时序差分模式下会引起前后相邻元素人工阶跃跳变，导致差分位宽急剧发散。fastalp 在差分与位打包前，将异常点自动用前一个有效整型值回填，消除人为差分抖动，保障差分压缩位宽保持极窄状态。
 
-- **2-bit 长度标签极简自描述帧头与超大数组原生支持**：<br>
+- **四步递推平衡二叉树与单周期时钟依赖解耦**：<br>
+  用于打破差分前缀和流水线循环累加的时钟周期依赖链瓶颈。<br>
+  在差分消费器中预计算极小差分步长常数向量，将连续累加依赖链解耦为同构四元组平衡二叉树；解耦当前累加器与内部差分总和计算，将跨 8 元素循环依赖时延缩短至单指令周期，差分时序数据集解压吞吐跃升至 18 ~ 28 GB/s。
+
+- **低位宽 16 元素宽字加载与指令级并行双倍展开**：<br>
+  用于消除细粒度解包时的逐元素分支判断与频繁的 CPU 加载端口争用。<br>
+  在 1、2、4 位小位宽解包内核中全面推行 16 元素展开，单次 64 位宽字读取直解 16 个元素并利用专门宏直写连续内存；基于 8 元周期数学定理构建覆盖 1 至 64 全位宽的编译期常量单态化分发体系，解压吞吐跃升至 28.0+ GB/s。
+
+- **时序游程重复无分支展开**：<br>
+  用于消除密集交替重复时序高频分支预测失败惩罚。<br>
+  证明并应用位图状态转移恒等式，将重复展开中逐位的条件分支判断彻底消除为单周期位运算与指针直写；全零字与全壹字直接触发 64 元素原生 SIMD 拷贝或广播填充，使重复密集型数据集解压吞吐大幅飙升。
+
+- **真实双精度高低位解耦全栈重构**：<br>
+  用于消除高低位解耦数据块在堆上分配、哈希查找与双重切片循环造成的性能断崖。<br>
+  采样阶段使用栈上固定数组单趟线性探测最佳 cut 位宽；字典构建阶段采用栈上 256 项开放寻址哈希表结合 Fibonacci 乘法哈希与位图指令筛选 top 8 字典项，全过程零堆分配；解码端重构为 1024 元素块级直通流式解码，低位尾数直接写入裸指针内存，高位字典原地位或合并，真实双精度解压吞吐从 3.7 GB/s 暴增至 11.6+ GB/s。
+
+- **统一解包消费器范式与单趟差分解码融合**：<br>
+  用于消除差分时序数据解码时 8KB 栈缓冲往返拷贝与双重循环延迟。<br>
+  重构原版及传统实现先解包整型差分至 8KB 临时栈缓冲、再单独循环计算前缀和并转换为浮点数的双重内存遍历模式。fastalp 抽象出通用单态化消费器流水线范式，在位解包内核循环体内直接原位累加前缀和并转换浮点数流式输出，全过程零栈缓冲分配、零中间内存回写与重读。
+
+- **极简自描述帧头与超大数组原生流式支持**：<br>
   用于消除帧头冗余开销并打破 65,535 元素单块截断限制。<br>
   采用 2-bit 长度标签自描述格式，标准 1024 元素满块头仅需 3 字节，RAW 保底模式仅需 1 字节；对于超过 65,535 元素的超大数组，自动升级为 32 位数量与异常偏移字段，无需人为分块截断即可实现单帧无损编码。
 
-- **12.5% 异常上限与单字节 RAW 保底回退**：<br>
-  用于有效消除高熵浮点数（如高精 GPS 坐标、科学计算随机数）压缩时空间膨胀的负压缩隐患。<br>
+- **12.5% 异常上限与单字节保底回退**：<br>
+  用于有效消除高熵浮点数压缩时空间膨胀的负压缩隐患。<br>
   当异常值数量超过 128 个（占 1024 元素的 12.5%）或压缩体积超过原始大小时，强制判定不可有效进行十进制变换，直接降级存储为单字节头部的 RAW 紧凑原始流，杜绝 C++ 原版中曾出现的 1.5x ~ 2.0x 体积膨胀。
 
 - **单次比较全等快跳**：<br>
   用于应对工业断线、设备待机与心跳常数流的高效瞬时压缩。<br>
-  在编码入口仅用 1 次 `slice[1] == slice[0]` 快速比对。非全等序列仅耗费 1 个 CPU 时钟周期即可退出；全等序列仅需 11 字节即可压缩 1024 元素（压缩比高达 **744x**）。
+  在编码入口仅用 1 次比对判定全等常数序列，非全等序列仅耗费 1 个 CPU 时钟周期即可退出；全等序列仅需 11 字节即可压缩 1024 元素（压缩比高达 744x）。
 
 - **三级级联微架构采样剪枝流水线**：<br>
-  用于解决 C++ 原版暴力穷举导致采样耗时超 80%、端到端吞吐仅 0.80 GB/s 的核心瓶颈。<br>
-  首创三级级联剪枝机制：第 1 级（纯十进制早停）对 32 个采样点进行基础十进制验证，无异常即刻确定参数返回，避免探索后续 170 种乘除因子；第 2 级（4 样本与 16 样本快筛）在评估候选因子时优先以 4 样本探测，超阈值即刻剪枝淘汰，避免全量 32 样本遍历；第 3 级（高熵科学浮点全面早停）若基础十进制异常率达 100%，判定为不可压缩科学高熵数据，直接跳出全部因子枚举。端到端编码吞吐因此从 0.80 GB/s 提升至 **3.7 GB/s（几何平均 4.6x 提速，单场景最高达 7.0x）**；在同等压缩纯编码（不含采样）口径下，fastalp 达到 **6.0 GB/s（较 C++ 官方 5.5 GB/s 快 1.10x）**；在命中状态化参数缓存时，流式参数缓存吞吐可达 **15~24+ GB/s**。
+  用于解决 C++ 原版暴力穷举导致采样耗时超 80%、端到端吞吐仅 0.8 GB/s 的核心瓶颈。<br>
+  第 1 级按高频分布优先试探纯十进制乘法，结合 6 样本快筛零异常即刻返回，跳过 170+ 种混合因子探索；第 2 级在评估候选因子时以 4 样本快筛超阈值即刻剪枝；第 3 级非十进制特征全面早停。端到端编码吞吐因此从 0.8 GB/s 提升至 1.9 GB/s（较原版提速 2.41x）；纯编码吞吐达 7.1 GB/s（较原版快 1.35x）；命中参数缓存时吞吐达 15~24+ GB/s。
 
-- **纯寄存器 SIMD 自动向量化解压流水线**：<br>
+- **纯寄存器向量化解压与 256 项栈上查找表**：<br>
   用于突破传统查表解压的内存寻址延迟与缓存未命中惩罚。<br>
-  针对 8、16、32、64 等常见位宽，重构为零分支、纯寄存器的并行 SIMD 展开指令序列（利用 ARM NEON 与 x86 AVX2 硬件向量寄存器），消除 gather 内存间接读取与缓存停顿，几何平均解压吞吐达到 **27.0 GB/s**（超越 C++ ALP 的 20.0 GB/s，提速 1.35x）。
-
-- **256 项栈上 L1D 局部查找表加速除法与小位宽**：<br>
-  用于消除循环体内耗费数十周期的硬件除法延迟与动态内存分配。<br>
-  针对 1、2、4 位小位宽以及十进制除法重构模式，在函数栈上直接构建 256 项局部查找表，数据 100% 常驻 CPU L1D 缓存，将原本几十个时钟周期的浮点硬件除法运算转化为单次纳秒级 L1D 查表。
+  针对规整位宽重构为纯寄存器的并行 SIMD 展开指令序列，消除 gather 内存间接读取；针对 1、2、4 位小位宽以及十进制除法重构模式，在函数栈上直接构建 256 项局部查找表，100% 常驻 CPU L1D 缓存，将几十周期的硬件除法转化为单次纳秒级寻址。
 
 - **8 路寄存器级熔合差分位打包**：<br>
   用于消除差分压缩时 8KB 内存回写带来的内存带宽与缓存挤占开销。<br>
-  传统实现采用遍历计算差分写回 8KB 内存并读回做位打包的双 pass 模式。fastalp 独创 8 路寄存器熔合流水线：在读取相邻元素求差的同时，直接减去基准，并流水线移位推入 128 位寄存器累加器打包输出，全过程**零临时内存分配、零内存回写**，差分压缩吞吐提升 30% 以上。
+  在读取相邻元素求差的同时，直接减去基准，并流水线移位推入 128 位寄存器累加器打包输出，全过程零临时内存分配、零内存回写，差分压缩吞吐提升 30% 以上。
 
 - **数学前置短路差分快筛**：<br>
   用于消除对无序或震荡数据无意义的全量一阶差分计算。<br>
-  基于数学定理局部子集的一阶极值跨度必小于等于全局极值跨度，在决定是否启用差分模式时，仅探测前 16 个采样点。若前 16 项的差分位宽已大于等于 FOR 基准位宽，则数学证明全局差分绝不可能更优，即刻早停跳出，避免了 90% 非平滑序列的全量差分扫描。
+  基于局部子集一阶极值跨度必小于等于全局极值跨度的数学定理，仅探测前 16 个采样点，若局部差分位宽大于等于基准位宽则即刻短路早停，避免了 90% 非平滑序列的全量扫描。
 
 - **4 路流水线无闭包展开编码**：<br>
-  用于释放现代 CPU 超标量流水线的乱序执行与多算术逻辑单元（ALU）吞吐潜能。<br>
-  将核心采样与整型缩放循环全面消除动态闭包与间接跳转，特化为专用的 4 路展开指令流。连续 4 项无异常时走全寄存器极值更新路径，使压缩吞吐突破 **4.4~6.8 GB/s**。
+  用于释放现代 CPU 超标量流水线的乱序执行与多执行单元吞吐潜能。<br>
+  将核心采样与整型缩放循环全面消除动态闭包与间接跳转，特化为专用的 4 路展开指令流，连续 4 项无异常时走全寄存器极值更新路径。
 
-- **栈缓冲融合与异常值单次批量提交**：<br>
-  用于避免动态扩容与堆内存碎片。<br>
-  解码与编码全程利用固定大小栈缓存；异常值位置索引与原始值在栈上定长组装后单次批量推入，将异常写出的系统开销降低 50%。
+- **零位宽常数写入向量化广播展开**：<br>
+  用于消除常数块逐元素写入对硬件向量化流水线的阻塞。<br>
+  在常数消费器中按 8 元素展开写入，余数逐个写入，使编译器自动生成向量广播存储指令，稀疏常数序列解压吞吐跃升至 90 ~ 93 GB/s。
 
 - **零堆分配流水线与内存缓冲区就地复用**：<br>
-  用于高频流式管道中避免 GC 与堆分配压力。<br>
-  对外统一提供 `compress_into` 与 `decompress_into` 接口，支持上层应用预分配并永久复用底层向量缓冲区，在海量流式写入中实现真正的**零额外堆内存分配**。
-
-- **统一泛型零成本抽象与预计算常数表**：<br>
-  用于一套代码兼顾 `f64` 与 `f32`，避免代码膨胀与运行时分支开销。<br>
-  通过 `AlpFloat` 特征将双精度与单精度浮点运算统一为泛型流水线，配合编译期预计算的 10 的幂次表与逆乘数表，实现无额外开销的高效内联。
-
-- **编译期常量级 64 路 8 元周期位解包与浮点重构内核**：<br>
-  用于消除通用位解包中 128 位变量移位指令膨胀与寄存器堆溢出。<br>
-  基于数学定理：任意位宽 $BW \in [1, 64]$ 下，每 8 个元素正好严格占据 $BW$ 个整字节（$8 \times BW / 8 = BW$）。fastalp 实现了覆盖 1~64 全位宽的编译期 const generics 单态化分发体系：小位宽（1, 2, 4）直通 L1D 预查表展开；规整位宽（8, 16, 32, 64）直通原生对齐/非对齐加载；$BW \le 56$ 的任意位宽全量在单次 64 位无符号读取内利用编译期折叠立即数完成解包与浮点缩放。解压吞吐跃升至 **28.1+ GB/s**，部分规整与单调数据集突破 **47 ~ 91 GB/s**。
-
-- **ALP-RD 真实双精度 1024 块级直通流式解码（零中间缓冲拷贝）**：<br>
-  用于消除高低位解耦数据块微小分批切片与双重内存回写造成的性能断崖。<br>
-  针对真实双精度科学数据（如高精 GPS、物理仿真），淘汰旧版 64 元素切片与双重切片循环机制，重构为 1024 元素块级直通解码流水线：高位宽尾数（`right_parts`）直接单次解包流式写入目标裸指针内存，1-3 位高位字典索引一次性解包至 8KB 栈缓冲，随后利用硬件超标量并行单次原地原位合并 `dst[i] |= shifted_dict[...]`。极端高位宽数据集（如 `cms1`, `poi_lat`, `poi_lon`）解压吞吐从 3.7 GB/s 暴增近 3 倍至 **11.6+ GB/s**。
-
-- **时序行程重复展开（expand_repeats）字级与字节级分支预测消除**：<br>
-  用于消除密集交替重复时序高频分支预测失败惩罚。<br>
-  原版依赖 64 位扫描与可变 `trailing_ones` / `bits >> run` 动态循环，在交替时序上引发大量 CPU 流水线冲刷。fastalp 重构为双层无分支架构：全零字与全壹字直接触发 64 元素原生 SIMD 拷贝或填充；混合字按字节展开（`0x00` 走 8 元素直通拷贝，`0xFF` 走 8 元素连写，其余按 8 步展开单周期条件递推），剔除全部动态移位与 `min` 边界计算，使重复密集型数据集（`food_prices`, `nyc29` 等）解压速度大幅提升 50% ~ 70%。
-
-- **强类型紧凑枚举 ChunkType 零开销重构**：<br>
-  用于消除元数据解析阶段的字符串匹配与冗余类型分支。<br>
-  将压缩块自描述标识重构为底层严格紧凑的 `#[repr(u8)] pub enum ChunkType`，与二进制线缆协议实现 1:1 零成本无缝映射，保证编译期类型穷尽检查与完全内联的分支跳转。
-
-- **统一解包消费器范式（AlpConsumer）与单趟差分解码融合**：<br>
-  用于消除差分时序数据解码时 8KB 栈缓冲往返拷贝与双重循环延迟。<br>
-  重构原版 C++ ALP 及旧版先解包整型差分至 8KB 临时栈缓冲、再单独循环计算前缀和并转换为浮点数的双重内存遍历模式。fastalp 抽象出通用单态化 `AlpConsumer` 流水线范式，实现单趟寄存器流式解码：在位解包内核循环体内，解出的每 8 个差分偏移量直接在 CPU 寄存器内进行前缀和累加，加基准后流水线转换为浮点数直接写入目标裸指针内存，全过程零栈缓冲分配、零中间内存回写与重读。差分典型数据集（如 `neon_air_pressure`）解压吞吐从 10.42 GB/s 跃升至 22.11 GB/s（提速 2.12x），所有 11 个 Delta 数据集吞吐全线上扬至 18 ~ 28 GB/s；全量 31 数据集算术平均解压吞吐正式突破 **30.34 GB/s**。
-
-- **解包内核解耦重构与无栈溢出专业化分发**：<br>
-  用于消除单体巨型文件耦合与非优化 Debug 模式下 192 路单态化展开导致的栈帧溢出风险。<br>
-  将单体 1442 行位解包逻辑重构解耦为 `consumer.rs`、`decoder.rs`、`kernel.rs` 与顶层安全入口。将内层宏直接分发到独立专业化无内联膨胀的子内核（`unpack_1`, `unpack_2`, `unpack_4`, `unpack_8`, `unpack_16`, `unpack_32`, `unpack_64`, `unpack_le16`, `unpack_17_to_32`, `unpack_33_to_64`），外层分发函数标记为受控 `#[inline]`，使测试调用栈帧从数兆字节降至百字节以内，根治 macOS 默认 512KB 测试线程栈溢出隐患，兼顾模块复用与高吞吐性能。
-
-- **全局展开、数组构造与位宽派发宏体系（`arr_8!`、`unroll_8!`、`write_8!`、`write_4!`、`match_pack_23!`）**：<br>
-  用于消除重复的手动索引偏移序列与冗长的多分支位宽分发匹配样板代码。<br>
-  抽象全局通用宏体系：`arr_8!` 与 `unroll_8!` 提供编译期 8 元素循环展开；`write_8!` 与 `write_4!` 在局部预绑定基础目标裸指针以杜绝表达式重复计算；`match_pack_23!` 基于块级编译期常量特化将 1 至 32 常用位宽的 23 分支模式匹配统一收敛，消除 120+ 行重复样板逻辑并保障编译内联。
-
-- **打包与解包内核单次宽位加载优化（16 位 / 32 位 / 128 位 Load）**：<br>
-  用于消除细粒度解包时的逐元素分支判断与频繁的 CPU Load 端口争用。<br>
-  在 `unpack_2`、`unpack_4` 与 `unpack_16` 非查表分支中：`unpack_2` 直接以单次 `u16` 加载 8 个 2-bit 元素并纯位移提取；`unpack_4` 直接以单次 `u32` 加载 8 个 4-bit 元素并纯位移提取，消除切片构造与中间开销；`unpack_16` 将连续 8 个 16 位整数读合并为单次 `u128` 宽位加载，Load 端口压力骤降 87.5%，使常规规整序列解压吞吐跃升至 **30.34 GB/s**。
-
-- **0 位宽常量填充向量化展开**：<br>
-  用于消除常数块逐元素写入对硬件向量化流水线的阻塞。<br>
-  在 `ForConsumer::consume_zeros` 中基于 `write_8!` 按 8 元素展开写入，余数逐个写入，使编译器自动生成 AVX2 或 NEON 向量广播存储指令，稀疏常数序列（如 `gov30`、`gov31`、`gov40`）解压吞吐跃升至 **90 ~ 93 GB/s**。
-
-- **解压前缀和关键路径依赖延迟削减**：<br>
-  用于打破流水线循环累加的时钟周期依赖链瓶颈。<br>
-  在 `AlpDeltaConsumer` 中解耦当前累加器 `curr` 与内部差分总和计算，将时钟周期循环依赖关键路径由 2 周期缩短至 1 周期，增强 CPU 指令级并行度（ILP），平滑时序差分数据集解压吞吐维持在 **18 ~ 27 GB/s**。
+  用于高频流式管道中避免内存分配器开销与碎片。<br>
+  对外统一提供 `compress_into` 与 `decompress_into` 接口，支持上层应用预分配并永久复用底层向量缓冲区，在海量流式写入中实现全程零额外堆分配。
 
 - **裸指针未初始化内存安全写入与 Soundness 保证**：<br>
   用于从机制上杜绝未初始化内存构造引用引发的未定义行为。<br>
-  在 `decompress_into`、`bitunpack_u64_raw` 与 `expand_repeats` 中全面采用裸指针预留与原地写入，在元素完全初始化写入后安全更新长度，完全消除在未初始化内存上构造切片引用的隐患，通过严苛的内存安全模型与静态检查。
+  在解压与重复展开中全面采用裸指针预留与原地写入，在元素完全初始化写入后安全更新长度，完全消除在未初始化内存上构造切片引用的隐患，通过严苛的内存安全模型与静态检查。
 
 
 ## C 兼容接口与跨语言集成
@@ -1410,7 +1467,7 @@ fastalp 并非简单的语言转译，而是在完整吸收 C++ ALP 论文精髓
 
 ```toml
 [dependencies]
-fastalp = { version = "0.1.42", features = ["capi"] }
+fastalp = { version = "0.1.46", features = ["capi"] }
 ```
 
 构建独立的静态库（`libfastalp.a`）或动态库（`libfastalp.so` / `libfastalp.dylib`）：

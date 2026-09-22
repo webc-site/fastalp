@@ -880,3 +880,38 @@ fn test_corrupted_repeat_bitmap_rejected() {
     );
   }
 }
+
+#[test]
+fn test_for_mode_relaxed_outlier_pruning() -> aok::Result<()> {
+  use fastalp::Encoder;
+
+  // 构造 1024 个浮点数：基底为密集小范围数据（10.00..10.15，仅需 4 比特）
+  // 注入 24 个离群尖峰点（超过旧的 16 预算限制，落入 16..32 宽容预算区间）
+  let mut data = Vec::with_capacity(1024);
+  for i in 0..1024 {
+    data.push(10.0 + ((i % 15) as f64) * 0.01);
+  }
+  for k in 0..24 {
+    data[k * 40 + 5] = 99999.99;
+  }
+
+  // 1. 测试基础 compress 自动剪枝与 100% 比特精确还原
+  let compressed = compress(&data);
+  let decompressed: Vec<f64> = decompress(&compressed)?;
+  assert_eq!(decompressed.len(), data.len());
+  for (i, (&orig, &dec)) in data.iter().zip(&decompressed).enumerate() {
+    assert_eq!(orig.to_bits(), dec.to_bits(), "mismatch at index {i}");
+  }
+
+  // 2. 测试状态化 Encoder 预分配容量复用与无堆重分配
+  let mut encoder = Encoder::<f64>::with_capacity(1024);
+  let mut comp_buf = Vec::new();
+  encoder.compress_into(&data, &mut comp_buf);
+  let dec2: Vec<f64> = decompress(&comp_buf)?;
+  assert_eq!(dec2.len(), data.len());
+  for (i, (&orig, &dec)) in data.iter().zip(&dec2).enumerate() {
+    assert_eq!(orig.to_bits(), dec.to_bits(), "mismatch at index {i}");
+  }
+
+  Ok(())
+}

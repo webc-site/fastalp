@@ -4,44 +4,62 @@
 
 ```mermaid
 graph TD
-  Input["Input Floating-Point Slice (&[f64] / &[f32])"] --> Sampler["Parameter Sampler<br/>Determine optimal (exp, fac) via cost model"]
-  Sampler --> Encoder["Lossless Integer Conversion<br/>Scaled rounding & bit-exact validation"]
-  Encoder --> Split{"Losslessly Encodable?"}
-  Split -- Yes --> IntStream["FOR Base Subtraction<br/>Calculate non-negative offsets"]
-  Split -- No --> ExcStream["Exception Recording<br/>Store index positions & raw IEEE 754 bits"]
-  IntStream --> Bitpacker["Dense Bitpacking<br/>Pack at dynamic bit-width"]
-  ExcStream --> Frame["Binary Frame Assembly<br/>Header + Base + Bitstream + Exception List"]
-  Bitpacker --> Frame
-  Frame --> Output["Compressed Payload (Vec<u8>)"]
+  Input["Input Floating-Point Slice (&[f64] / &[f32])"] --> Identical{"Single Comparison Equi-Probe"}
+  Identical -- Identical Series --> FastConst["11-Byte Ultra-Fast Constant Frame (Up to 744x)"]
+  Identical -- Normal Series --> Sampler["Three-Stage Cascade Sampler<br/>Decimal Early Exit / 4-Sample Pruning / High-Entropy Abort"]
+  Sampler --> NegCheck{"Exceptions > 12.5% or High-Entropy"}
+  NegCheck -- Yes --> RawFrame["1-Byte Header RAW Compact Fallback Frame (Zero Expansion)"]
+  NegCheck -- No --> SimdKernel["4-way SIMD Vectorized Integer Mapping<br/>Native Round-Ties-Even + Adaptive Mul/Div"]
+  SimdKernel --> DiffPrune["Dual-Stage Dynamic Outlier Pruning<br/>16-Exception Delta Shield / 32-Exception FOR Release"]
+  DiffPrune --> DeltaJudge{"16-Sample Mathematical Short-Circuit Delta Check"}
+  DeltaJudge -- Delta Better --> DeltaPack["Delta Mode: Preceding Backfill + 8-Way Register Delta Packing"]
+  DeltaJudge -- FOR Better --> ForPack["FOR Mode: Base Purge + Frame-of-Reference Packing"]
+  DeltaPack --> FrameAssemble["Self-Describing Binary Frame Assembly<br/>2-bit Length Tag + 3-Byte Full Header + Exceptions"]
+  ForPack --> FrameAssemble
+  FastConst --> Output["Compact Compressed Binary Stream"]
+  RawFrame --> Output
+  FrameAssemble --> Output
 ```
 
 ### Compression Pipeline
 
 - **Equi-value Detection & Fallback (`encoder.rs`)**:<br>
-  Fast-path detection for constant sequences. Direct emission of compact headers when identical values are observed. Automatically falls back to raw 1-byte header storage if data entropy prevents effective decimal reduction.
+  Single-cycle branchless check (`slice[1] == slice[0]`) to detect constant sequences; emits 1024 uniform elements in 11 bytes (744x ratio). Automatically reverts to 1-byte RAW fallback if data entropy exceeds 12.5% exception ceiling to prevent negative compression.
 
-- **Sampling & Cost-Model Optimization (`sampler.rs`)**:<br>
-  Evaluates up to 32 evenly distributed sample points across `(exp, fac)` parameter spaces, minimizing total encoded bit-width and penalty-weighted exceptions.
+- **Three-Stage Cascade Parameter Sampling (`sampler.rs`)**:<br>
+  Replaces unpruned 190-combination searches: Stage 1 tests pure decimal multiplication on high-frequency exponents with a 6-sample zero-exception fast-return; Stage 2 rapidly weeds out unpromising candidate factors using 4-sample probes; Stage 3 aborts immediately on non-decimal high-entropy data.
 
-- **Lossless Conversion & Validation (`sampler.rs`, `float.rs`)**:<br>
-  Multiplies floats by $10^{\text{exp}} \times 10^{-\text{fac}}$, rounds to nearest integer via floating-point bias constants, and validates bit-exact equality through inverse scaling.
+- **4-way Unrolled SIMD Mapping & Decimal Division (`kernel.rs`, `float/`)**:<br>
+  Utilizes hardware-native round-ties-even instructions (ARM64 `FRINTN` / x86 `ROUNDSD`), eliminating legacy magic-number overflow. Dynamically triggers decimal division (`use_div`) to eliminate 1-ULP multiplication truncation errors. Simultaneously tracks extremum reduction trees and probes for zero block exceptions in a single pass.
 
-- **Base Subtraction & Bitpacking (`bitpack/pack.rs`, `encoder.rs`)**:<br>
-  Computes minimum valid integer as frame base (FOR mode), derives dynamic bit-widths, and densely packs offsets into bytes using a 128-bit sliding accumulator.
+- **Dual-Stage Dynamic Outlier Pruning (`outlier.rs`, `engine.rs`)**:<br>
+  Constrains exception budget to 16 during pre-pruning to shield Delta candidates, then relaxes exclusively to 32 in FOR mode to crush long-tail spike bit-widths; restores base values prior to FOR pruning to purge Delta backfill artifacts.
 
-- **Exception Stream Serialization (`encoder.rs`)**:<br>
-  Unencodable float positions and raw IEEE 754 bit representations are recorded in a compact trailing exception table.
+- **Adaptive Delta Difference & Short-Circuit Check (`delta/`, `encoder/delta.rs`)**:<br>
+  Probes first 16 samples to mathematically prove whether difference bit-width can beat FOR mode, short-circuiting in under 10ns; backfills preceding integers at exception slots; packs differences in 8-way fused register pipelines with zero memory roundtrips.
+
+- **Full-Bitwidth Const Generics Bitpacking (`bitpack/pack.rs`)**:<br>
+  Leverages 8-element periodic invariant (8 elements strictly consume $BW$ bytes) through `match_pack_32!` dispatch; special-cases 52-bit double pairs and 56-bit 7-byte direct stores.
 
 ### Decompression Pipeline
 
-- **Self-Describing Header Parsing (`header.rs`, `decoder.rs`)**:<br>
-  Parses the 2-bit length flag, extracts metadata parameters `(exp, fac, bit_width)`, and recovers the frame base value.
+- **Self-Describing Header Parsing (`header.rs`)**:<br>
+  Reads 1-byte descriptor with 2-bit length tag (1024-element full block, u8, u16, u32 length tiers), natively streaming arbitrary array slices; 3-byte header for full blocks, 1-byte header for RAW fallbacks.
 
-- **Bitstream Unpacking (`bitpack/unpack.rs`)**:<br>
-  Employs pure SIMD register pipelines for 8/16/32/64 bit widths to avoid gather and memory lookup latency, combined with stack-resident LUTs for narrow widths (1/2/4 bit).
+- **Fused Single-Pass Consumer & 1-Cycle Recurrence Decoupling (`bitpack/unpack/`)**:<br>
+  Eliminates 8KB scratch buffers by decoupling decoding into `AlpConsumer` single-pass pipelines. Bit-unpacking, FOR base addition, or prefix-sum recurrence and float reconstruction happen directly in registers; shrinks cross-iteration loop dependencies to 1 clock cycle for 18 ~ 28 GB/s delta decompression.
 
-- **Exception Patching (`decoder.rs`)**:<br>
-  Applies trailing exceptions at specified index offsets, restoring non-finite and out-of-range floats bit-for-bit.
+- **16-Element Wide Word Loading & L1D Local Tables (`kernel.rs`, `decoder.rs`)**:<br>
+  Unpacks 16 elements per 64-bit load on narrow bit-widths (1, 2, 4 bits) using `write_16!`; accelerates decimal division and narrow widths with 256-entry stack-resident L1D lookup tables.
+
+- **Branch-Free Repeat Expansion (`decoder/mod.rs`)**:<br>
+  Applies bitwise state transition invariants to eliminate all conditional branches and pipeline stalls during repeat expansion; triggers 64-element native SIMD copies/broadcasts on full-zero/full-one words.
+
+- **Real Doubles (ALP-RD) Direct Streaming Decode (`decoder/standard.rs`, `rd.rs`)**:<br>
+  Streams unpacked low-bit mantissas directly to destination pointers, followed by in-place bitwise-OR dictionary merging, boosting decompression throughput to 11.6+ GB/s.
+
+- **In-Place Exception Patching (`decoder/mod.rs`)**:<br>
+  Directly restores exact IEEE 754 bit representations at recorded exception indices without buffer reallocation.
 
 ---
 
@@ -66,7 +84,7 @@ fastalp/
 ├── src/                # Library source code
 │   ├── bitpack/        # Modular bit-level packing and unpacking
 │   │   ├── mod.rs      # Module facade and re-exports
-│   │   ├── pack.rs     # Dense bitpacking with match_pack_23 dispatch
+│   │   ├── pack.rs     # Dense bitpacking with match_pack_32 dispatch
 │   │   └── unpack/     # Decoupled bit-unpacking engine
 │   │       ├── mod.rs      # Top-level dispatch and safe facades
 │   │       ├── consumer.rs # AlpConsumer abstraction (FOR/Delta prefix-sum/raw writes)
@@ -88,7 +106,9 @@ fastalp/
 │   │   ├── outlier.rs  # FOR-mode outlier pruning algorithm
 │   │   ├── exception.rs# Exception layout and compact serialization
 │   │   ├── standard.rs # Standard FOR frame assembly
-│   │   └── delta.rs    # Delta difference frame assembly
+│   │   ├── delta.rs    # Delta difference frame assembly
+│   │   ├── dict.rs     # Sparse constant and impulse dictionary encoding
+│   │   └── rd.rs       # Real Doubles (ALP-RD) stack hash construction
 │   ├── error.rs        # Error definitions and Result type aliases
 │   ├── float/          # AlpFloat trait and generic lossless transformations
 │   │   ├── mod.rs      # AlpFloat trait and lookup table builders

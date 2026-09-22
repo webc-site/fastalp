@@ -58,7 +58,10 @@ pub(crate) fn try_prune_outliers<F: AlpFloat>(
   for &val in encoded_ints.iter() {
     let diff = F::int_diff_to_u64(val, base);
     let bw = F::bits_needed(diff) as usize;
-    hist[bw] += 1;
+    // SAFETY: bits_needed 在 u64 上至多返回 64，hist 长度为 65，绝不越界
+    unsafe {
+      *hist.get_unchecked_mut(bw) += 1;
+    }
   }
 
   let mut exc_count = [0usize; 65];
@@ -73,7 +76,8 @@ pub(crate) fn try_prune_outliers<F: AlpFloat>(
 
   // 连续降序搜索全量候选位宽：一旦离群点超标直接 break 终止
   for target_bw in (0..for_bit_width).rev() {
-    let extra_exceptions = exc_count[target_bw as usize];
+    // SAFETY: target_bw < for_bit_width <= 64，exc_count 长度为 65，索引绝不越界
+    let extra_exceptions = unsafe { *exc_count.get_unchecked(target_bw as usize) };
     if extra_exceptions > budget {
       break;
     }
@@ -112,6 +116,9 @@ pub(crate) fn apply_target_bw<F: AlpFloat>(
     (1u64 << target_bw) - 1
   };
   let had_prev = !exceptions.is_empty();
+  if exceptions.capacity() < exceptions.len() + 32 {
+    exceptions.reserve(32);
+  }
   for (pos, (&v, val_mut)) in slice.iter().zip(encoded_ints.iter_mut()).enumerate() {
     let diff = F::int_diff_to_u64(*val_mut, base);
     if diff > max_allowed {
