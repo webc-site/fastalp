@@ -67,6 +67,22 @@ macro_rules! unroll_8 {
   }};
 }
 
+/// Unrolls a block 16 times with `$idx` bound to 0..16.
+/// 将逻辑按索引 0..16 重复展开 16 次顺序执行
+#[macro_export]
+macro_rules! unroll_16 {
+  ($idx:ident => $expr:expr) => {{
+    $crate::unroll_8!(k => {
+      let $idx = k;
+      $expr;
+    });
+    $crate::unroll_8!(k => {
+      let $idx = k + 8;
+      $expr;
+    });
+  }};
+}
+
 /// Writes 8 evaluated elements to consecutive raw pointer memory `*($dst).add(k) = expr(k)`.
 /// 向连续裸指针内存顺序写入 8 个计算结果（局部绑定 base 指针，杜绝表达式重复求值）
 #[macro_export]
@@ -74,6 +90,18 @@ macro_rules! write_8 {
   ($dst:expr, $idx:ident => $expr:expr) => {{
     let dst = $dst;
     $crate::unroll_8!($idx => {
+      *dst.add($idx) = $expr;
+    });
+  }};
+}
+
+/// Writes 16 evaluated elements to consecutive raw pointer memory `*($dst).add(k) = expr(k)`.
+/// 向连续裸指针内存顺序写入 16 个计算结果（局部绑定 base 指针）
+#[macro_export]
+macro_rules! write_16 {
+  ($dst:expr, $idx:ident => $expr:expr) => {{
+    let dst = $dst;
+    $crate::unroll_16!($idx => {
       *dst.add($idx) = $expr;
     });
   }};

@@ -86,17 +86,13 @@ unsafe fn expand_byte<F: AlpFloat>(
       *prev = *dst_ptr.add(out_pos + 7);
     } else if byte == 0xFF {
       let p = *prev;
-      for k in 0..8 {
-        dst_ptr.add(out_pos + k).write(p);
-      }
+      write_8!(dst_ptr.add(out_pos), _k => p);
     } else {
-      for k in 0..8 {
-        if (byte & (1 << k)) == 0 {
-          *src_idx += 1;
-          *prev = *non_repeats.add(*src_idx);
-        }
-        *dst_ptr.add(out_pos + k) = *prev;
-      }
+      unroll_8!(k => {
+        *src_idx += ((byte >> k) & 1 ^ 1) as usize;
+        *dst_ptr.add(out_pos + k) = *non_repeats.add(*src_idx);
+      });
+      *prev = *dst_ptr.add(out_pos + 7);
     }
   }
 }
@@ -135,12 +131,10 @@ pub(crate) unsafe fn expand_repeats<F: AlpFloat>(
       if w == 0 {
         // Word 0: bit 0 is already stored as element 0
         for k in 1..8 {
-          if (bitmap[0] & (1 << k)) == 0 {
-            src_idx += 1;
-            prev = *non_repeats.add(src_idx);
-          }
-          *dst_ptr.add(k) = prev;
+          src_idx += ((bitmap[0] >> k) & 1 ^ 1) as usize;
+          *dst_ptr.add(k) = *non_repeats.add(src_idx);
         }
+        prev = *dst_ptr.add(7);
         #[allow(clippy::needless_range_loop)]
         for b in 1..8 {
           expand_byte(
@@ -157,9 +151,10 @@ pub(crate) unsafe fn expand_repeats<F: AlpFloat>(
         src_idx += 64;
         prev = *dst_ptr.add(base_out + 63);
       } else if word == u64::MAX {
-        for k in 0..64 {
-          dst_ptr.add(base_out + k).write(prev);
-        }
+        let p = prev;
+        unroll_8!(chunk => {
+          write_8!(dst_ptr.add(base_out + chunk * 8), _k => p);
+        });
       } else {
         let bytes_ptr = bitmap.as_ptr().add(base_out / 8);
         for b in 0..8 {
@@ -180,13 +175,8 @@ pub(crate) unsafe fn expand_repeats<F: AlpFloat>(
     for i in (rem_start + start_j)..count {
       let byte_idx = i / 8;
       let bit_idx = i % 8;
-      if (bitmap[byte_idx] & (1 << bit_idx)) != 0 {
-        *dst_ptr.add(i) = prev;
-      } else {
-        src_idx += 1;
-        prev = *non_repeats.add(src_idx);
-        *dst_ptr.add(i) = prev;
-      }
+      src_idx += ((bitmap[byte_idx] >> bit_idx) & 1 ^ 1) as usize;
+      *dst_ptr.add(i) = *non_repeats.add(src_idx);
     }
   }
 }
