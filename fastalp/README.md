@@ -58,6 +58,7 @@ A pure Rust implementation of adaptive lossless floating-point compression, deep
   - [Thread-Local Streaming Interface](#thread-local-streaming-interface)
   - [Explicit Instance Handle Interface](#explicit-instance-handle-interface)
 - [Changelog](#changelog)
+  - [v0.1.48](#v0148)
   - [v0.1.47](#v0147)
   - [v0.1.46](#v0146)
   - [v0.1.45](#v0145)
@@ -711,6 +712,17 @@ Designed for worker-pool architectures and per-column isolated states:
 
 ## Changelog
 
+### v0.1.48
+
+- **Non-Dependent Parallel LUT Repeat Expansion & 2KB Compile-Time Table**:
+  Precomputes a 256*8 byte relative offset lookup table (`REPEAT_OFFSETS_LUT`, exactly 2KB, 100% resident in L1 D-Cache) via `const fn`. Breaks the 8-stage serial shift-and-add data dependency chain in time-series run-length expansion, dispatching concurrent memory loads across superscalar CPU execution ports. Completely eliminates `prev` state tracking and provides native SIMD fast paths for all-zero and all-one words, dramatically accelerating decompression for repeat-dense datasets.
+- **Zero-Width Constant Broadcast Soundness Hardening & Vectorized In-Place Writes**:
+  Replaces manual store loops for `bit_width == 0` blocks with `MaybeUninit` slice `fill`, strictly complying with the Rust Tree Borrows and Stacked Borrows memory models while enabling LLVM to emit native SIMD broadcast stores (ARM64 `st1` / x86 `vmovups`) that saturate memory bus bandwidth at 80~95 GB/s.
+- **4-Run Contiguous Span Sampling & High-Risk Exception Penalty**:
+  Restructures sample extraction into 4 contiguous runs distributed across 0%, 33%, 66%, and 100% intervals of the block, capturing local differential smoothness while eliminating global bias at an O(1) constant budget. Integrates `calc_exc_cost` with a 4x exponential penalty on high exception rates (`exceptions >= 3`), preventing parameters from exceeding the 128-exception threshold and falling back to RAW mode. Propels `cms1` compression ratio by +39% with decompression speed doubling to 29.5 GB/s, while securing stable decimal encoding for `medicare1`.
+- **Fill-Forward Exception Smoothing & Single-Step Index Probe**:
+  Ensures exceptions inherit predecessor integers so differential residuals are strictly 0, preventing artificial jump spikes. Employs standard library `position` iterators over sorted exceptions to find initial valid elements in O(K) time, replacing repetitive binary searches across the entire block.
+
 ### v0.1.47
 
 - **Streamlined Example Codebase & Unified Relative Dataset Paths**:
@@ -826,6 +838,7 @@ Designed for worker-pool architectures and per-column isolated states:
   - [线程局部流式接口](#线程局部流式接口)
   - [独立实例句柄接口](#独立实例句柄接口)
 - [更新日志](#更新日志)
+  - [v0.1.48](#v0148)
   - [v0.1.47](#v0147)
   - [v0.1.46](#v0146)
   - [v0.1.45](#v0145)
@@ -1538,6 +1551,17 @@ cargo build --release --features capi
 
 
 ## 更新日志
+
+### v0.1.48
+
+- **无依赖查表并发解重构与 2KB 相对偏移编译期表**：<br>
+  在时序游程重复（Repeat）展开中，利用 `const fn` 编译期预计算 256*8 字节的相对偏移表 `REPEAT_OFFSETS_LUT`（2KB，100% 常驻 L1D 缓存）。彻底打破逐位移位加法的 8 阶段串行数据依赖链，使 8 槽位目标数据由 CPU Load 端口完全并发加载写入；完全消除 `prev` 状态变量，首字 `word == 0` 直通零拷贝，尾块自动分块批量展开。
+- **0 位宽常量广播 Soundness 治理与 LLVM 向量化直写**：<br>
+  针对 `bit_width == 0` 的常量块与平直差分块，全面采用 `MaybeUninit` 切片包装执行 `fill`，既彻底消除了在未初始化内存上构造非 `MaybeUninit` 引用的 Tree Borrows / Stacked Borrows 未定义行为（UB）风险，又精准触发编译器底层 SIMD 广播填充（ARM64 `st1` / x86 `vmovups`），吞吐直达物理总线极限（80~95 GB/s）。
+- **4-Run 跨度采样覆盖与动态高危异常惩罚机制**：<br>
+  将样本抽取重构为覆盖序列 0%、33%、66%、100% 区间的 4 个连续 Run，保留局部一阶差分特征的同时杜绝首部常数偏差；定义 `HIGH_EXC_THRESHOLD = 3` 与 `HIGH_EXC_PENALTY_MULT = 4`，引入 `calc_exc_cost` 动态高危异常惩罚机制，彻底消除采样选错参数导致的 1024 块突破 128 异常上限及恶性回退 RAW。使真实世界数据集 `cms1` 压缩比由 1.14x 跃升至 1.59x（+39%）、解压吞吐跃升至 29.5 GB/s（+150%），`medicare1` 彻底消除 RAW 回退稳定进入十进制高压状态。
+- **异常点平滑回填单步定位优化**：<br>
+  在编码扫描内核中实施前值平滑回填（Fill-Forward），异常点原地继承前一有效编码值，差分恒为 0；利用 `exceptions` 的天然升序性，使用标准库原生单步迭代器 `position` 替换原先在 `0..count` 上的二分查找，将首有效元素查找复杂度从 O(count · log K) 降至 O(K)。
 
 ### v0.1.47
 
