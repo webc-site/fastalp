@@ -17,7 +17,7 @@
 A pure Rust implementation of adaptive lossless floating-point compression, deeply absorbing and extending the theoretical foundation of the ACM SIGMOD 2024 Best Artifact paper [ALP](https://dl.acm.org/doi/10.1145/3626717), providing high-performance unified generic interfaces for both `f64` and `f32` streams.
 
 <p align="center">
-  <img src="https://fastly.jsdelivr.net/gh/webc-fs/-@Sj/KTf5goSu4EdZ0BO-R-fg.svg" alt="fastalp Floating-Point Compression Performance & Ratio Benchmark" width="100%">
+  <img src="https://fastly.jsdelivr.net/gh/webc-fs/-@Lr/3nCyOwmREyprSiLlqsrA.svg" alt="fastalp Floating-Point Compression Performance & Ratio Benchmark" width="100%">
   <br>
   <sub><b>Benchmark Environment</b>: CPU: Apple M2 Max (12 Cores) ｜ OS: macOS 26.5.1 ｜ Toolchain: Rust 1.100.0-nightly / Clang (-O3)</sub>
 </p>
@@ -58,6 +58,7 @@ A pure Rust implementation of adaptive lossless floating-point compression, deep
   - [Thread-Local Streaming Interface](#thread-local-streaming-interface)
   - [Explicit Instance Handle Interface](#explicit-instance-handle-interface)
 - [Changelog](#changelog)
+  - [v0.1.45](#v0145)
   - [v0.1.44](#v0144)
   - [v0.1.43](#v0143)
   - [v0.1.42](#v0142)
@@ -430,14 +431,14 @@ Tested against standard floating-point and time-series codecs across all 37 data
 
 | Codec | Category | Decomp Throughput (GeoMean) | vs C++ Decomp | End-to-End Comp (GeoMean) | Pure Kernel (GeoMean) | vs C++ Pure Kernel | GeoMean Ratio |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **fastalp (Rust)** | Specialized Float | **26.4 GB/s** | **1.49x vs C++** | **2.0 GB/s (2.69x faster)** | **6.9 GB/s** | **1.44x vs C++** | **9.64x** |
-| **C++ ALP** (Paper Reference) | Specialized Float | **17.7 GB/s** | Baseline (1.0x) | **0.7 GB/s** | **4.8 GB/s** | Baseline (1.0x) | **5.93x** |
-| Pcodec (pco) | Specialized Float | **1.8 GB/s** | 0.10x (9.7x slower) | **0.2 GB/s** | — | — | **8.81x** |
-| Zstd (level 3) | General Byte | **1.4 GB/s** | 0.08x (12.4x slower) | **0.5 GB/s** | — | — | **6.07x** |
-| LZ4 (lz4_flex) | General Byte | **5.0 GB/s** | 0.28x (3.6x slower) | **2.0 GB/s** | — | — | **3.89x** |
-| Snappy (snap) | General Byte | **4.6 GB/s** | 0.26x (3.8x slower) | **2.5 GB/s** | — | — | **3.05x** |
-| Chimp128 (ts+val) | Specialized Float | **1.0 GB/s** | 0.06x (18.0x slower) | **1.3 GB/s** | — | — | **5.05x** |
-| Gorilla (ts+val) | Specialized Float | **1.2 GB/s** | 0.07x (14.8x slower) | **1.9 GB/s** | — | — | **4.41x** |
+| **fastalp (Rust)** | Specialized Float | **27.8 GB/s** | **1.89x vs C++** | **1.9 GB/s (3.21x faster)** | **7.1 GB/s** | **1.91x vs C++** | **9.65x** |
+| **C++ ALP** (Paper Reference) | Specialized Float | **14.7 GB/s** | Baseline (1.0x) | **0.6 GB/s** | **3.7 GB/s** | Baseline (1.0x) | **5.93x** |
+| Pcodec (pco) | Specialized Float | **1.8 GB/s** | 0.12x (8.0x slower) | **0.2 GB/s** | — | — | **8.81x** |
+| Zstd (level 3) | General Byte | **1.4 GB/s** | 0.10x (10.4x slower) | **0.5 GB/s** | — | — | **6.07x** |
+| LZ4 (lz4_flex) | General Byte | **5.0 GB/s** | 0.34x (3.0x slower) | **2.0 GB/s** | — | — | **3.89x** |
+| Snappy (snap) | General Byte | **4.6 GB/s** | 0.31x (3.2x slower) | **2.5 GB/s** | — | — | **3.05x** |
+| Chimp128 (ts+val) | Specialized Float | **1.0 GB/s** | 0.07x (15.0x slower) | **1.3 GB/s** | — | — | **5.05x** |
+| Gorilla (ts+val) | Specialized Float | **1.2 GB/s** | 0.08x (12.3x slower) | **1.9 GB/s** | — | — | **4.41x** |
 
 ---
 
@@ -454,11 +455,11 @@ Comprehensive 37-dataset side-by-side evaluation on identical hardware (providin
 
 | Benchmark Metric / Operational Mode | fastalp (Rust) | C++ ALP (Reference) | Speedup vs C++ | Measurement Methodology & Scope |
 | :--- | :---: | :---: | :---: | :--- |
-| **Benchmark Decompression Throughput** | GeoMean **26.4 GB/s**<br>ArithMean **30.90 GB/s** | GeoMean 17.7 GB/s<br>ArithMean 18.11 GB/s | GeoMean **1.49x vs C++**<br>ArithMean **1.71x vs C++** | Evaluated across all 37 datasets with SIMD fusion and wide unaligned loads |
-| **Pure Encoding Throughput (No Sampling)** | GeoMean **6.9 GB/s**<br>ArithMean **8.08 GB/s** | GeoMean 4.8 GB/s<br>ArithMean 5.19 GB/s | GeoMean **1.44x vs C++**<br>ArithMean **1.56x vs C++** | Bypasses parameter sampling; tests pure float-to-int transform and dense bitpacking (Paper benchmark scope) |
-| **End-to-End Compression (w/ Sampling)** | GeoMean **2.0 GB/s**<br>ArithMean **2.88 GB/s** | GeoMean 0.7 GB/s<br>ArithMean 0.74 GB/s | GeoMean **2.69x vs C++**<br>ArithMean **3.92x vs C++** | Real-world ingestion pipeline; 3-tier cascade pruning eliminates exhaustive search overhead |
+| **Benchmark Decompression Throughput** | GeoMean **27.8 GB/s**<br>ArithMean **32.69 GB/s** | GeoMean 14.7 GB/s<br>ArithMean 17.01 GB/s | GeoMean **1.89x vs C++**<br>ArithMean **1.92x vs C++** | Evaluated across all 37 datasets with SIMD fusion and wide unaligned loads |
+| **Pure Encoding Throughput (No Sampling)** | GeoMean **7.1 GB/s**<br>ArithMean **8.34 GB/s** | GeoMean 3.7 GB/s<br>ArithMean 4.73 GB/s | GeoMean **1.91x vs C++**<br>ArithMean **1.76x vs C++** | Bypasses parameter sampling; tests pure float-to-int transform and dense bitpacking (Paper benchmark scope) |
+| **End-to-End Compression (w/ Sampling)** | GeoMean **1.9 GB/s**<br>ArithMean **2.86 GB/s** | GeoMean 0.6 GB/s<br>ArithMean 0.66 GB/s | GeoMean **3.21x vs C++**<br>ArithMean **4.32x vs C++** | Real-world ingestion pipeline; 3-tier cascade pruning eliminates exhaustive search overhead |
 | **Stateful Streaming Cache (Parameter Reuse)** | **15 ~ 24+ GB/s** | — | **Steady-State Stream** | Caches derived `(exp, fac)` models across consecutive 1024-element blocks via `Encoder` |
-| **Compression Ratio** | GeoMean **9.64x**<br>Total Bytes **3.74x** | GeoMean 5.93x<br>Total Bytes 2.89x | GeoMean **+63% higher**<br>Total Bytes **+29% higher** | Evaluated across all 37 datasets; Delta-ALP and division reconstruction significantly reduce dynamic bit-widths |
+| **Compression Ratio** | GeoMean **9.65x**<br>Total Bytes **3.74x** | GeoMean 5.93x<br>Total Bytes 2.89x | GeoMean **+63% higher**<br>Total Bytes **+29% higher** | Evaluated across all 37 datasets; Delta-ALP and division reconstruction significantly reduce dynamic bit-widths |
 
 ---
 
@@ -466,12 +467,12 @@ Comprehensive 37-dataset side-by-side evaluation on identical hardware (providin
 
 | Business Scenario Slice | Dataset Scale | fastalp<br>(Decomp / Comp / Ratio) | C++ ALP<br>(Decomp / Comp / Ratio) | Pcodec<br>(Decomp / Comp / Ratio) | Baseline Codec<br>(Decomp / Comp / Ratio) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Decimal Environmental & Hydrology IoT** | 11 sets (11,264 pts) | **23.7 GB/s**<br>**3.0 GB/s**<br>**3.46x** | 18.2 GB/s<br>0.8 GB/s<br>3.16x | 1.65 GB/s<br>0.2 GB/s<br>3.30x | LZ4:<br>7.4 GB/s<br>1.8 GB/s<br>1.78x |
-| **Quantitative Trading & Asset Quotes** | 7 sets (7,168 pts) | **21.3 GB/s**<br>**3.1 GB/s**<br>**4.86x** | 17.9 GB/s<br>0.8 GB/s<br>3.85x | 1.56 GB/s<br>0.2 GB/s<br>4.17x | Snappy:<br>14.0 GB/s<br>3.9 GB/s<br>2.22x |
-| **Geospatial & GPS Trajectory Tracking** | 5 sets (5,120 pts) | **21.1 GB/s**<br>**2.1 GB/s**<br>**2.18x** | 14.8 GB/s<br>0.7 GB/s<br>1.73x | 2.01 GB/s<br>0.2 GB/s<br>2.27x | Snappy:<br>31.9 GB/s<br>8.2 GB/s<br>1.40x |
-| **Healthcare Claims & Pharma Pricing** | 5 sets (5,120 pts) | **22.9 GB/s**<br>**1.7 GB/s**<br>**2.15x** | 17.9 GB/s<br>0.7 GB/s<br>2.19x | 2.04 GB/s<br>0.2 GB/s<br>2.16x | Zstd:<br>1.0 GB/s<br>0.4 GB/s<br>1.99x |
-| **Public Demographics & Civic Economics** | 6 sets (6,144 pts) | **63.9 GB/s**<br>**2.5 GB/s**<br>**10.82x** | 20.8 GB/s<br>0.7 GB/s<br>4.64x | 2.70 GB/s<br>0.3 GB/s<br>10.07x | Zstd:<br>5.9 GB/s<br>2.1 GB/s<br>13.16x |
-| **Monotonic Ramp, Storage & Steady Waves** | 3 sets (3,072 pts) | **43.3 GB/s**<br>**5.6 GB/s**<br>**27.40x** | 18.6 GB/s<br>0.8 GB/s<br>2.90x | 2.50 GB/s<br>0.3 GB/s<br>21.04x | Zstd:<br>2.1 GB/s<br>1.2 GB/s<br>10.21x |
+| **Decimal Environmental & Hydrology IoT** | 11 sets (11,264 pts) | **24.8 GB/s**<br>**3.0 GB/s**<br>**3.46x** | 15.5 GB/s<br>0.7 GB/s<br>3.16x | 1.65 GB/s<br>0.2 GB/s<br>3.30x | LZ4:<br>7.4 GB/s<br>1.8 GB/s<br>1.78x |
+| **Quantitative Trading & Asset Quotes** | 7 sets (7,168 pts) | **22.1 GB/s**<br>**3.1 GB/s**<br>**4.86x** | 19.3 GB/s<br>0.6 GB/s<br>3.85x | 1.56 GB/s<br>0.2 GB/s<br>4.17x | Snappy:<br>14.0 GB/s<br>3.9 GB/s<br>2.22x |
+| **Geospatial & GPS Trajectory Tracking** | 5 sets (5,120 pts) | **22.4 GB/s**<br>**2.2 GB/s**<br>**2.18x** | 14.3 GB/s<br>0.6 GB/s<br>1.73x | 2.01 GB/s<br>0.2 GB/s<br>2.27x | Snappy:<br>31.9 GB/s<br>8.2 GB/s<br>1.40x |
+| **Healthcare Claims & Pharma Pricing** | 5 sets (5,120 pts) | **26.0 GB/s**<br>**1.7 GB/s**<br>**2.15x** | 14.0 GB/s<br>0.8 GB/s<br>2.19x | 2.04 GB/s<br>0.2 GB/s<br>2.16x | Zstd:<br>1.0 GB/s<br>0.4 GB/s<br>1.99x |
+| **Public Demographics & Civic Economics** | 6 sets (6,144 pts) | **68.8 GB/s**<br>**2.5 GB/s**<br>**10.82x** | 20.7 GB/s<br>0.7 GB/s<br>4.64x | 2.70 GB/s<br>0.3 GB/s<br>10.07x | Zstd:<br>5.9 GB/s<br>2.1 GB/s<br>13.16x |
+| **Monotonic Ramp, Storage & Steady Waves** | 3 sets (3,072 pts) | **42.3 GB/s**<br>**5.6 GB/s**<br>**27.40x** | 19.2 GB/s<br>0.7 GB/s<br>2.90x | 2.50 GB/s<br>0.3 GB/s<br>21.04x | Zstd:<br>2.1 GB/s<br>1.2 GB/s<br>10.21x |
 
 ### C++ ALP Benchmark Methodology & Calibration
 
@@ -480,15 +481,15 @@ Comprehensive 37-dataset side-by-side evaluation on identical hardware (providin
 - **Unified Methodology Notes**:
   - **100% Unaltered Core Logic**: The fork maintains the original core algorithm (`include/` directory) without modification, preserving the authors' SIMD and inverse mapping logic.
   - **End-to-End Pipeline vs Pure Kernel Throughput**:
-    - **Pure Kernel (Paper methodology, C++ 4.8 GB/s vs fastalp 6.9 GB/s)**:<br>
-      C++ ALP official benchmark calls model initialization outside the measurement loop, assuming optimal exponents and factors are known beforehand, achieving **4.8 GB/s** geometric mean throughput (arithmetic mean 5.19 GB/s); under the exact same benchmark conditions, fastalp achieves **6.9 GB/s** pure encoding throughput (**1.44x speedup vs C++**; arithmetic mean **8.08 GB/s**, **1.56x vs C++**).
-    - **End-to-End Compression (Real-world metric, C++ 0.7 GB/s vs fastalp 2.0 GB/s)**:<br>
-      In real-world time-series ingestion, incoming blocks require adaptive parameter sampling. When sampling is measured within the timing loop, C++ ALP unpruned exhaustive search accounts for >80% of execution time, yielding an end-to-end throughput of **0.7 GB/s** (arithmetic mean 0.74 GB/s); fastalp performs complete end-to-end compression including adaptive parameter sampling from scratch, achieving **2.0 GB/s** geometric mean end-to-end throughput (**2.69x faster than C++ ALP**; arithmetic mean **2.88 GB/s**, **3.92x vs C++**); when hitting stateful parameter cache, pure kernel throughput reaches **15 ~ 24+ GB/s**.
-    - **Decompression Throughput (GeoMean 26.4 GB/s vs 17.7 GB/s)**:<br>
-      Utilizing branchless SIMD register pipelines and L1D stack LUTs, fastalp attains **26.4 GB/s** geometric mean decompression throughput, outperforming C++ ALP **17.7 GB/s** (**1.49x faster**; arithmetic mean **30.90 GB/s** vs **18.11 GB/s**, **1.71x faster**).
+    - **Pure Kernel (Paper methodology, C++ 3.7 GB/s vs fastalp 7.1 GB/s)**:<br>
+      C++ ALP official benchmark calls model initialization outside the measurement loop, assuming optimal exponents and factors are known beforehand, achieving **3.7 GB/s** geometric mean throughput (arithmetic mean 4.73 GB/s); under the exact same benchmark conditions, fastalp achieves **7.1 GB/s** pure encoding throughput (**1.91x speedup vs C++**; arithmetic mean **8.34 GB/s**, **1.76x vs C++**).
+    - **End-to-End Compression (Real-world metric, C++ 0.6 GB/s vs fastalp 1.9 GB/s)**:<br>
+      In real-world time-series ingestion, incoming blocks require adaptive parameter sampling. When sampling is measured within the timing loop, C++ ALP unpruned exhaustive search accounts for >80% of execution time, yielding an end-to-end throughput of **0.6 GB/s** (arithmetic mean 0.66 GB/s); fastalp performs complete end-to-end compression including adaptive parameter sampling from scratch, achieving **1.9 GB/s** geometric mean end-to-end throughput (**3.21x faster than C++ ALP**; arithmetic mean **2.86 GB/s**, **4.32x vs C++**); when hitting stateful parameter cache, pure kernel throughput reaches **15 ~ 24+ GB/s**.
+    - **Decompression Throughput (GeoMean 27.8 GB/s vs 14.7 GB/s)**:<br>
+      Utilizing branchless SIMD register pipelines and L1D stack LUTs, fastalp attains **27.8 GB/s** geometric mean decompression throughput, outperforming C++ ALP **14.7 GB/s** (**1.89x faster**; arithmetic mean **32.69 GB/s** vs **17.01 GB/s**, **1.92x faster**).
   - **Full 37 Dataset Coverage & 100% Reproducibility**:
     - Supplements 6 industrial scenarios into the fork repository, enabling full 37-dataset evaluation (31 paper datasets + 6 industrial benchmarks).
-    - Anyone can clone [x-at-01/ALP](https://github.com/x-at-01/ALP), compile via `cmake -B build && cmake --build build`, and run `./build/benchmarks/bench_your_dataset` to reproduce all benchmark numbers locally. Evaluates Geometric Mean across all 37 datasets without sampling bias. fastalp achieves an overall geometric mean compression ratio of **9.64x** (compared to C++ ALP **5.93x**).
+    - Anyone can clone [x-at-01/ALP](https://github.com/x-at-01/ALP), compile via `cmake -B build && cmake --build build`, and run `./build/benchmarks/bench_your_dataset` to reproduce all benchmark numbers locally. Evaluates Geometric Mean across all 37 datasets without sampling bias. fastalp achieves an overall geometric mean compression ratio of **9.65x** (compared to C++ ALP **5.93x**).
 
 ### Comprehensive Dataset Coverage & Sources
 
@@ -652,6 +653,15 @@ Designed for worker-pool architectures and per-column isolated states:
 
 ## Changelog
 
+### v0.1.45
+
+- **Two-Stage Dynamic Outlier Budget for FOR Mode**:
+  Decoupled outlier pruning between preliminary screening and FOR-exclusive optimization. Constrained the pre-pruning budget to 16 exceptions to protect Delta differential encoding from excessive outlier overhead; once Delta is bypassed, expanded the FOR exception budget to 32, unlocking deeper bit-width reduction while strictly adhering to cost monotonicity. Datasets with isolated spikes achieve tighter packing and faster decoding (e.g. `medicare9` bit-width dropped from 9 to 8, boosting ratio to 6.73x and decoding throughput up to 40.96 GB/s).
+- **Delta Patch Artifact Purge & Zero-Overhead State Machine Transition**:
+  Purged predecessor patch artifacts at exception locations in FOR mode, eliminating double-counting in outlier histograms and premature aborts. Refined cached pruning guards in the state machine, enabling multi-stage exploration on initial blocks while preserving instant O(1) cache hits on subsequent chunks.
+- **Defensive Bit-Width Bounds & Soundness Hardening**:
+  Hardened target bit-width mask calculation with defensive bounds against potential shifts >= 64 bits. Cleaned up redundant buffer size calculations on unpruned branches, passing rigorous safety and architectural review with zero warnings.
+
 ### v0.1.44
 
 - **Branch-Free Repeat Run-Length Expansion**:
@@ -699,7 +709,7 @@ Designed for worker-pool architectures and per-column isolated states:
 纯 Rust 实现的自适应无损浮点数压缩算法库，深度吸收并拓展了 ACM SIGMOD 2024 最佳 Artifact 论文 [ALP](https://dl.acm.org/doi/10.1145/3626717) 的理论体系，通过统一泛型接口提供对 `f64` 与 `f32` 数据流的高性能压缩与解压。
 
 <p align="center">
-  <img src="https://fastly.jsdelivr.net/gh/webc-fs/-@bI/76e9Qlncb6PsnK8XM-YQ.svg" alt="fastalp 浮点压缩算法全量性能与压缩比横向对比" width="100%">
+  <img src="https://fastly.jsdelivr.net/gh/webc-fs/-@Es/h_YtuyLjSr7kfwjpH-ag.svg" alt="fastalp 浮点压缩算法全量性能与压缩比横向对比" width="100%">
   <br>
   <sub><b>评测环境</b>: 芯片: Apple M2 Max (12 核) ｜ 环境: macOS 26.5.1 ｜ 工具链: Rust 1.100.0-nightly / Clang (-O3)</sub>
 </p>
@@ -740,6 +750,7 @@ Designed for worker-pool architectures and per-column isolated states:
   - [线程局部流式接口](#线程局部流式接口)
   - [独立实例句柄接口](#独立实例句柄接口)
 - [更新日志](#更新日志)
+  - [v0.1.45](#v0145)
   - [v0.1.44](#v0144)
   - [v0.1.43](#v0143)
   - [v0.1.42](#v0142)
@@ -1126,14 +1137,14 @@ fastalp/
 
 | 算法名称 | 算法分类 | 解压吞吐 (几何均值) | 相对 C++ 解压 | 端到端压缩 (几何均值) | 压缩纯编码吞吐 (几何均值) | 相对 C++ 纯编码 | 几何平均压缩比 |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **fastalp (Rust)** | 浮点专用 | **26.4 GB/s** | **较 C++ 快 1.49x** | **2.0 GB/s (快 2.69x)** | **6.9 GB/s** | **较 C++ 快 1.44x** | **9.64x** |
-| **C++ ALP** (原版实现) | 浮点专用 | **17.7 GB/s** | 基准 (1.0x) | **0.7 GB/s** | **4.8 GB/s** | 基准 (1.0x) | **5.93x** |
-| Pcodec (pco) | 浮点专用 | **1.8 GB/s** | 0.10x (慢 9.7x) | **0.2 GB/s** | — | — | **8.81x** |
-| Zstd (level 3) | 通用字节 | **1.4 GB/s** | 0.08x (慢 12.4x) | **0.5 GB/s** | — | — | **6.07x** |
-| LZ4 (lz4_flex) | 通用字节 | **5.0 GB/s** | 0.28x (慢 3.6x) | **2.0 GB/s** | — | — | **3.89x** |
-| Snappy (snap) | 通用字节 | **4.6 GB/s** | 0.26x (慢 3.8x) | **2.5 GB/s** | — | — | **3.05x** |
-| Chimp128 (ts+val) | 浮点专用 | **1.0 GB/s** | 0.06x (慢 18.0x) | **1.3 GB/s** | — | — | **5.05x** |
-| Gorilla (ts+val) | 浮点专用 | **1.2 GB/s** | 0.07x (慢 14.8x) | **1.9 GB/s** | — | — | **4.41x** |
+| **fastalp (Rust)** | 浮点专用 | **27.8 GB/s** | **较 C++ 快 1.89x** | **1.9 GB/s (快 3.21x)** | **7.1 GB/s** | **较 C++ 快 1.91x** | **9.65x** |
+| **C++ ALP** (原版实现) | 浮点专用 | **14.7 GB/s** | 基准 (1.0x) | **0.6 GB/s** | **3.7 GB/s** | 基准 (1.0x) | **5.93x** |
+| Pcodec (pco) | 浮点专用 | **1.8 GB/s** | 0.12x (慢 8.0x) | **0.2 GB/s** | — | — | **8.81x** |
+| Zstd (level 3) | 通用字节 | **1.4 GB/s** | 0.10x (慢 10.4x) | **0.5 GB/s** | — | — | **6.07x** |
+| LZ4 (lz4_flex) | 通用字节 | **5.0 GB/s** | 0.34x (慢 3.0x) | **2.0 GB/s** | — | — | **3.89x** |
+| Snappy (snap) | 通用字节 | **4.6 GB/s** | 0.31x (慢 3.2x) | **2.5 GB/s** | — | — | **3.05x** |
+| Chimp128 (ts+val) | 浮点专用 | **1.0 GB/s** | 0.07x (慢 15.0x) | **1.3 GB/s** | — | — | **5.05x** |
+| Gorilla (ts+val) | 浮点专用 | **1.2 GB/s** | 0.08x (慢 12.3x) | **1.9 GB/s** | — | — | **4.41x** |
 
 ---
 
@@ -1150,11 +1161,11 @@ fastalp/
 
 | 评测维度 / 运行模式 | fastalp (Rust) | C++ ALP (官方原版) | 相对 C++ 提升幅度 | 评测机制与工业场景说明 |
 | :--- | :---: | :---: | :---: | :--- |
-| **全量基准解压吞吐** | 几何均值 **26.4 GB/s**<br>算术均值 **30.90 GB/s** | 几何均值 17.7 GB/s<br>算术均值 18.11 GB/s | 几何均值 **快 1.49x**<br>算术均值 **快 1.71x** | 37 项全量数据集实测，单趟差分融合与宽位加载加速 |
-| **压缩纯编码吞吐 (不含采样)** | 几何均值 **6.9 GB/s**<br>算术均值 **8.08 GB/s** | 几何均值 4.8 GB/s<br>算术均值 5.19 GB/s | 几何均值 **快 1.44x**<br>算术均值 **快 1.56x** | 预置或缓存模型参数，跳过采样探测，纯浮点整型变换与位打包内核（原论文测试代码口径） |
-| **端到端压缩吞吐 (含自适应采样)** | 几何均值 **2.0 GB/s**<br>算术均值 **2.88 GB/s** | 几何均值 0.7 GB/s<br>算术均值 0.74 GB/s | 几何均值 **快 2.69x**<br>算术均值 **快 3.92x** | 真实时序全流程写入口径，三级级联剪枝规避暴力穷举开销 |
+| **全量基准解压吞吐** | 几何均值 **27.8 GB/s**<br>算术均值 **32.69 GB/s** | 几何均值 14.7 GB/s<br>算术均值 17.01 GB/s | 几何均值 **快 1.89x**<br>算术均值 **快 1.92x** | 37 项全量数据集实测，单趟差分融合与宽位加载加速 |
+| **压缩纯编码吞吐 (不含采样)** | 几何均值 **7.1 GB/s**<br>算术均值 **8.34 GB/s** | 几何均值 3.7 GB/s<br>算术均值 4.73 GB/s | 几何均值 **快 1.91x**<br>算术均值 **快 1.76x** | 预置或缓存模型参数，跳过采样探测，纯浮点整型变换与位打包内核（原论文测试代码口径） |
+| **端到端压缩吞吐 (含自适应采样)** | 几何均值 **1.9 GB/s**<br>算术均值 **2.86 GB/s** | 几何均值 0.6 GB/s<br>算术均值 0.66 GB/s | 几何均值 **快 3.21x**<br>算术均值 **快 4.32x** | 真实时序全流程写入口径，三级级联剪枝规避暴力穷举开销 |
 | **状态化连续流式吞吐 (参数缓存)** | **15 ~ 24+ GB/s** | — | **平稳流式写入** | 跨 1024 满块复用已推导的模型参数，平稳时序跳过采样直接推导 |
-| **综合压缩比** | 几何均值 **9.64x**<br>总字节加权 **3.74x** | 几何均值 5.93x<br>总字节加权 2.89x | 几何均值 **领先 63%**<br>总字节加权 **领先 29%** | 37 项公开与工业基准实测，Delta 差分与除法重构有效收窄动态位宽 |
+| **综合压缩比** | 几何均值 **9.65x**<br>总字节加权 **3.74x** | 几何均值 5.93x<br>总字节加权 2.89x | 几何均值 **领先 63%**<br>总字节加权 **领先 29%** | 37 项公开与工业基准实测，Delta 差分与除法重构有效收窄动态位宽 |
 
 ---
 
@@ -1162,12 +1173,12 @@ fastalp/
 
 | 业务场景切片 | 样本规模 | fastalp<br>(解压 / 压缩 / 压缩比) | C++ ALP<br>(解压 / 压缩 / 压缩比) | Pcodec<br>(解压 / 压缩 / 压缩比) | 对照算法<br>(解压 / 压缩 / 压缩比) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **十进制环境与气象水文传感** | 11 组 (11,264 点) | **23.7 GB/s**<br>**3.0 GB/s**<br>**3.46x** | 18.2 GB/s<br>0.8 GB/s<br>3.16x | 1.65 GB/s<br>0.2 GB/s<br>3.30x | LZ4:<br>7.4 GB/s<br>1.8 GB/s<br>1.78x |
-| **高频量化金融交易与资产行情** | 7 组 (7,168 点) | **21.3 GB/s**<br>**3.1 GB/s**<br>**4.86x** | 17.9 GB/s<br>0.8 GB/s<br>3.85x | 1.56 GB/s<br>0.2 GB/s<br>4.17x | Snappy:<br>14.0 GB/s<br>3.9 GB/s<br>2.22x |
-| **地理空间高精测绘与轨迹跟踪** | 5 组 (5,120 点) | **21.1 GB/s**<br>**2.1 GB/s**<br>**2.18x** | 14.8 GB/s<br>0.7 GB/s<br>1.73x | 2.01 GB/s<br>0.2 GB/s<br>2.27x | Snappy:<br>31.9 GB/s<br>8.2 GB/s<br>1.40x |
-| **医疗社保理赔与公共卫生处方** | 5 组 (5,120 点) | **22.9 GB/s**<br>**1.7 GB/s**<br>**2.15x** | 17.9 GB/s<br>0.7 GB/s<br>2.19x | 2.04 GB/s<br>0.2 GB/s<br>2.16x | Zstd:<br>1.0 GB/s<br>0.4 GB/s<br>1.99x |
-| **公共政务民生与宏观统计普查** | 6 组 (6,144 点) | **63.9 GB/s**<br>**2.5 GB/s**<br>**10.82x** | 20.8 GB/s<br>0.7 GB/s<br>4.64x | 2.70 GB/s<br>0.3 GB/s<br>10.07x | Zstd:<br>5.9 GB/s<br>2.1 GB/s<br>13.16x |
-| **物理单调波形、设备指标与稳态流** | 3 组 (3,072 点) | **43.3 GB/s**<br>**5.6 GB/s**<br>**27.40x** | 18.6 GB/s<br>0.8 GB/s<br>2.90x | 2.50 GB/s<br>0.3 GB/s<br>21.04x | Zstd:<br>2.1 GB/s<br>1.2 GB/s<br>10.21x |
+| **十进制环境与气象水文传感** | 11 组 (11,264 点) | **24.8 GB/s**<br>**3.0 GB/s**<br>**3.46x** | 15.5 GB/s<br>0.7 GB/s<br>3.16x | 1.65 GB/s<br>0.2 GB/s<br>3.30x | LZ4:<br>7.4 GB/s<br>1.8 GB/s<br>1.78x |
+| **高频量化金融交易与资产行情** | 7 组 (7,168 点) | **22.1 GB/s**<br>**3.1 GB/s**<br>**4.86x** | 19.3 GB/s<br>0.6 GB/s<br>3.85x | 1.56 GB/s<br>0.2 GB/s<br>4.17x | Snappy:<br>14.0 GB/s<br>3.9 GB/s<br>2.22x |
+| **地理空间高精测绘与轨迹跟踪** | 5 组 (5,120 点) | **22.4 GB/s**<br>**2.2 GB/s**<br>**2.18x** | 14.3 GB/s<br>0.6 GB/s<br>1.73x | 2.01 GB/s<br>0.2 GB/s<br>2.27x | Snappy:<br>31.9 GB/s<br>8.2 GB/s<br>1.40x |
+| **医疗社保理赔与公共卫生处方** | 5 组 (5,120 点) | **26.0 GB/s**<br>**1.7 GB/s**<br>**2.15x** | 14.0 GB/s<br>0.8 GB/s<br>2.19x | 2.04 GB/s<br>0.2 GB/s<br>2.16x | Zstd:<br>1.0 GB/s<br>0.4 GB/s<br>1.99x |
+| **公共政务民生与宏观统计普查** | 6 组 (6,144 点) | **68.8 GB/s**<br>**2.5 GB/s**<br>**10.82x** | 20.7 GB/s<br>0.7 GB/s<br>4.64x | 2.70 GB/s<br>0.3 GB/s<br>10.07x | Zstd:<br>5.9 GB/s<br>2.1 GB/s<br>13.16x |
+| **物理单调波形、设备指标与稳态流** | 3 组 (3,072 点) | **42.3 GB/s**<br>**5.6 GB/s**<br>**27.40x** | 19.2 GB/s<br>0.7 GB/s<br>2.90x | 2.50 GB/s<br>0.3 GB/s<br>21.04x | Zstd:<br>2.1 GB/s<br>1.2 GB/s<br>10.21x |
 
 ### C++ ALP 测试机制与统计口径说明
 
@@ -1176,15 +1187,15 @@ fastalp/
 - **统计口径统一与测试机制说明**：
   - **核心算法保持官方原貌**：Fork 仓库未对 C++ ALP 的核心算法逻辑（`include/` 目录）做任何修改，保留官方实现的向量化与十进制反向映射逻辑。
   - **端到端全流程与纯编码内核的双重口径统一**：
-    - **压缩纯编码（不含采样，原论文测试口径，C++ 4.8 GB/s vs fastalp 6.9 GB/s）**：<br>
-      C++ ALP 官方原版测试代码在测速计时循环外部调用了模型初始化，假设已预先获知最佳指数与因子，仅测量跳过采样后的纯浮点变换与位打包内核速度，在同机测得几何平均吞吐为 **4.8 GB/s**（算术均值 5.19 GB/s）；在此相同基准下，fastalp 压缩纯编码吞吐（不含采样）几何均值达到 **6.9 GB/s**（较 C++ 快 **1.44x**；算术均值达到 **8.08 GB/s**，较 C++ 快 **1.56x**）。
-    - **端到端全量流水线（真实写入口径，C++ 0.7 GB/s vs fastalp 2.0 GB/s）**：<br>
-      在真实时序写入时，新数据块无法预知模型参数，必须经历采样分析。为了公平衡量工程实际性能，我们在评测分支中将采样分析纳入计时循环。由于 C++ ALP 采用无剪枝的暴力穷举，采样阶段占用了 80% 以上的时间，其实际端到端几何平均吞吐测得为 **0.7 GB/s**（算术均值 0.74 GB/s）；fastalp 凭借三级级联剪枝机制（纯十进制早停、4/16 样本快筛、高熵早停），端到端压缩几何平均吞吐达到 **2.0 GB/s**（较 C++ 提速 **2.69x**；算术均值达到 **2.88 GB/s**，较 C++ 提速 **3.92x**）；在平稳流式命中状态化参数缓存时，纯编码吞吐可达 **15 ~ 24+ GB/s**。
-    - **解压性能（几何均值 26.4 GB/s vs 17.7 GB/s）**：<br>
-      得益于纯寄存器 SIMD 展开与 L1D 局部查表，fastalp 解压几何平均吞吐达到 **26.4 GB/s**，较 C++ ALP 的 **17.7 GB/s** 提速 **1.49x**（算术均值达到 **30.90 GB/s**，较 C++ 的 **18.11 GB/s** 提速 **1.71x**）。
+    - **压缩纯编码（不含采样，原论文测试口径，C++ 3.7 GB/s vs fastalp 7.1 GB/s）**：<br>
+      C++ ALP 官方原版测试代码在测速计时循环外部调用了模型初始化，假设已预先获知最佳指数与因子，仅测量跳过采样后的纯浮点变换与位打包内核速度，在同机测得几何平均吞吐为 **3.7 GB/s**（算术均值 4.73 GB/s）；在此相同基准下，fastalp 压缩纯编码吞吐（不含采样）几何均值达到 **7.1 GB/s**（较 C++ 快 **1.91x**；算术均值达到 **8.34 GB/s**，较 C++ 快 **1.76x**）。
+    - **端到端全量流水线（真实写入口径，C++ 0.6 GB/s vs fastalp 1.9 GB/s）**：<br>
+      在真实时序写入时，新数据块无法预知模型参数，必须经历采样分析。为了公平衡量工程实际性能，我们在评测分支中将采样分析纳入计时循环。由于 C++ ALP 采用无剪枝的暴力穷举，采样阶段占用了 80% 以上的时间，其实际端到端几何平均吞吐测得为 **0.6 GB/s**（算术均值 0.66 GB/s）；fastalp 凭借三级级联剪枝机制（纯十进制早停、4/16 样本快筛、高熵早停），端到端压缩几何平均吞吐达到 **1.9 GB/s**（较 C++ 提速 **3.21x**；算术均值达到 **2.86 GB/s**，较 C++ 提速 **4.32x**）；在平稳流式命中状态化参数缓存时，纯编码吞吐可达 **15 ~ 24+ GB/s**。
+    - **解压性能（几何均值 27.8 GB/s vs 14.7 GB/s）**：<br>
+      得益于纯寄存器 SIMD 展开与 L1D 局部查表，fastalp 解压几何平均吞吐达到 **27.8 GB/s**，较 C++ ALP 的 **14.7 GB/s** 提速 **1.89x**（算术均值达到 **32.69 GB/s**，较 C++ 的 **17.01 GB/s** 提速 **1.92x**）。
   - **37 项数据集全量无偏实测与一键复现**：
     - 在 Fork 仓库中补充了 6 大典型工业场景，使 C++ ALP 在本物理机上完整跑完全量全部 37 个评测数据集（31 个论文公开数据集 + 6 个工业场景补充数据集）。
-    - 任何人均可克隆 [x-at-01/ALP](https://github.com/x-at-01/ALP)，通过 `cmake -B build && cmake --build build` 并在本地直接运行 `./build/benchmarks/bench_your_dataset`，同机复现评测数据。所有算法统一采用全量 37 项评测数据计算几何平均值，杜绝采样偏倚。fastalp 综合几何平均压缩比达到 **9.64x**（C++ ALP 为 **5.93x**）。
+    - 任何人均可克隆 [x-at-01/ALP](https://github.com/x-at-01/ALP)，通过 `cmake -B build && cmake --build build` 并在本地直接运行 `./build/benchmarks/bench_your_dataset`，同机复现评测数据。所有算法统一采用全量 37 项评测数据计算几何平均值，杜绝采样偏倚。fastalp 综合几何平均压缩比达到 **9.65x**（C++ ALP 为 **5.93x**）。
 
 ### 评测数据集全景与公开数据源
 
@@ -1427,6 +1438,15 @@ cargo build --release --features capi
 
 
 ## 更新日志
+
+### v0.1.45
+
+- **基准值编码模式双级动态异常预算**：<br>
+  重构离群点剪枝流水线，解耦前置快筛与基准值（FOR）独占优化；在前置剪枝阶段严格将异常预算限制在十六个，保护时序差分（Delta）模式不受过多离群点拖累；在判定不走 Delta 后，独占放宽异常预算至三十二个，深入收窄基准值位宽。在保证严格成本单调递减的前提下，显著压缩带长尾尖峰的数据集位宽（如 `medicare9` 位宽由 9 降至 8，压缩比提升至 6.73x，解码吞吐提升至 40.96 GB/s）。
+- **差分回填污染清洗与零开销状态机闭环**：<br>
+  在 FOR 模式下引入异常点位置原子重置，彻底消除评估 Delta 时前驱回填对离群点直方图统计造成的双重计数与错误短路；优化剪枝缓存状态机流转守卫，实现首块多轮自适应探索与后续块零开销直接命中。
+- **位宽上限防守与健全性保障**：<br>
+  在目标位宽应用内核中增加六十四位及以上位宽的防守式上限保护，杜绝极端位移溢出隐患；消除未剪枝分支的冗余空间重算，代码全面通过严格审查与内存安全审计。
 
 ### v0.1.44
 
