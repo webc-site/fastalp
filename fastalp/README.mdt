@@ -1,5 +1,5 @@
 <a href="https://github.com/webc-site/fastalp/blob/main/README.md#en"><img src="https://cdn.jsdmirror.com/gh/webc-site/svg/i18n/en.svg" height="28"></a>
-<a href="https://github.com/webc-site/fastalp/blob/main/README.md#zh"><img src="https://cdn.jsdmirror.com/gh/webc-site/svg/i18n/zh.svg" height="28"></a>
+<a href="https://github.com/webc-site/fastalp/tree/main/fastalp#zh"><img src="https://cdn.jsdmirror.com/gh/webc-site/svg/i18n/zh.svg" height="28"></a>
 
 <a href="https://github.com/webc-site/fastalp"><img src="https://img.shields.io/badge/GitHub-webc--site%2Ffastalp-181717?logo=github&logoColor=white" height="28"></a>
 <a href="https://x.com/iwebcsite"><img src="https://img.shields.io/badge/Twitter-@iwebcsite-1DA1F2?logo=x&logoColor=white" height="28"></a>
