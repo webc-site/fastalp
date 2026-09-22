@@ -250,22 +250,28 @@ impl<F: AlpFloat, D: AlpDecoder<F>> AlpConsumer<F> for AlpDeltaConsumer<F, D> {
     let m2 = self.m_steps[1];
     let m3 = self.m_steps[2];
     let m4 = self.m_steps[3];
+    let m8 = F::int_add(m4, m4);
+
+    // delta_total 完全独立于 curr 预先就绪
+    let total_u = F::int_add(p0123, p4567);
+    let delta_total = F::int_add(total_u, m8);
+
+    let curr = self.curr;
+    // 跨 8 元素循环依赖时延压至极致的 1 个周期！
+    self.curr = F::int_add(curr, delta_total);
 
     // 第一组 4 元素：基准为 curr
-    let b0 = self.curr;
-    let c0 = F::int_add(b0, F::int_add(u0, m1));
-    let c1 = F::int_add(b0, F::int_add(p01, m2));
-    let c2 = F::int_add(b0, F::int_add(F::int_add(p01, u2), m3));
-    let c3 = F::int_add(b0, F::int_add(p0123, m4));
+    let c0 = F::int_add(curr, F::int_add(u0, m1));
+    let c1 = F::int_add(curr, F::int_add(p01, m2));
+    let c2 = F::int_add(curr, F::int_add(F::int_add(p01, u2), m3));
+    let c3 = F::int_add(curr, F::int_add(p0123, m4));
 
-    // 第二组 4 元素：结构同构，基准无缝顺延为 c3
+    // 第二组 4 元素：同构展开
     let b1 = c3;
     let c4 = F::int_add(b1, F::int_add(u4, m1));
     let c5 = F::int_add(b1, F::int_add(p45, m2));
     let c6 = F::int_add(b1, F::int_add(F::int_add(p45, u6), m3));
-    let c7 = F::int_add(b1, F::int_add(p4567, m4));
-
-    self.curr = c7;
+    let c7 = self.curr;
 
     let c = [c0, c1, c2, c3, c4, c5, c6, c7];
     unsafe {
