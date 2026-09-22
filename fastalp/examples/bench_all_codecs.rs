@@ -35,7 +35,7 @@ use std::{
   time::Instant,
 };
 
-use fastalp::{Encoder, decompress_into};
+use fastalp::{Encoder, decompress_into, max_compressed_size};
 use graupel::{
   Codec, Point,
   codec::{Chimp128, Gorilla},
@@ -182,7 +182,7 @@ fn as_u8_slice(data: &[f64]) -> &[u8] {
 /// 同时测量端到端冷启动动态参数采样吞吐与热状态纯内核流水线吞吐。
 fn bench_fastalp(data: &[f64]) -> CodecResult {
   let iters = 1000;
-  let mut compressed = Vec::with_capacity(data.len() * 2 + 64);
+  let mut compressed = Vec::with_capacity(max_compressed_size::<f64>(data.len()));
   let mut restored: Vec<f64> = Vec::with_capacity(data.len());
   let mut encoder = Encoder::new();
 
@@ -192,7 +192,7 @@ fn bench_fastalp(data: &[f64]) -> CodecResult {
     compressed.clear();
     encoder.compress_into(data, &mut compressed);
     restored.clear();
-    decompress_into(&compressed, &mut restored).unwrap();
+    let _ = decompress_into(&compressed, &mut restored);
   }
 
   // 1. Measure cold sampled encoding (dynamic parameter sampling on each pass).
@@ -223,7 +223,9 @@ fn bench_fastalp(data: &[f64]) -> CodecResult {
   let t2 = Instant::now();
   for _ in 0..iters {
     restored.clear();
-    decompress_into(&compressed, &mut restored).unwrap();
+    unsafe {
+      decompress_into(&compressed, &mut restored).unwrap_unchecked();
+    }
     black_box(&restored);
   }
   let dec_dt = t2.elapsed().as_secs_f64() / iters as f64;
@@ -716,11 +718,7 @@ fn main() {
     // 评测各公开时序数据集。
     for (name, vals) in &samples {
       let r = runner(vals);
-      let raw_bytes = if key == "chimp128" || key == "gorilla" {
-        vals.len() * size_of::<Point>()
-      } else {
-        vals.len() * size_of::<f64>()
-      };
+      let raw_bytes = r.raw_bytes;
       total_raw += raw_bytes;
       total_compressed += r.compressed_bytes;
       sum_enc += r.enc_gb_s;

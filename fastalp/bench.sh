@@ -6,7 +6,7 @@ cd $DIR
 set -x
 
 # 1. 检查并准备 C++ ALP 环境 (相对路径，不存在则自动 clone depth=1 并编译)
-ALP_DIR="$(cd "${DIR}/../../" && pwd)/ALP"
+ALP_DIR="${ALP_DIR:-$(cd "${DIR}/../../" && pwd)/ALP}"
 export ALP_DIR
 
 if [ ! -d "$ALP_DIR" ]; then
@@ -18,9 +18,10 @@ fi
 (cd "$ALP_DIR" && git checkout bench/self-eval)
 
 echo "=== 1. Building and Running C++ ALP Benchmark (All 37 Datasets) ==="
-if [ ! -d "$ALP_DIR/build" ]; then
-  cmake -B "$ALP_DIR/build" -S "$ALP_DIR" -DCMAKE_BUILD_TYPE=Release
-fi
+cmake -B "$ALP_DIR/build" -S "$ALP_DIR" \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DALP_BUILD_BENCHMARKING=ON \
+  -DFASTALP_DIR="$DIR"
 cmake --build "$ALP_DIR/build" --target bench_your_dataset -j
 (cd "$ALP_DIR" && ./build/benchmarks/bench_your_dataset)
 bun -e 'import { loadCppAlpResult } from "./benches/lib/cpp_alp_loader.js"; await loadCppAlpResult();'

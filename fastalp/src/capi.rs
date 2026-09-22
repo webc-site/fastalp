@@ -6,9 +6,10 @@ use core::{
 use std::{
   cell::RefCell,
   panic::{AssertUnwindSafe, catch_unwind},
+  thread::LocalKey,
 };
 
-use crate::{Encoder, compress_into, decompress_into_raw};
+use crate::{AlpFloat, Encoder, compress_into, decompress_into_raw};
 
 thread_local! {
   static TLS_COMP_BUF: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
@@ -131,6 +132,83 @@ fn is_aligned_to<T>(ptr: *const T) -> bool {
   (ptr as usize).is_multiple_of(align_of::<T>())
 }
 
+#[inline]
+unsafe fn capi_compress<F: AlpFloat>(
+  src: *const F,
+  len: usize,
+  dst: *mut u8,
+  dst_cap: usize,
+) -> usize {
+  if src.is_null() || dst.is_null() || len == 0 || !is_aligned_to(src) {
+    return 0;
+  }
+  let input = unsafe { from_raw_parts(src, len) };
+  catch_unwind(AssertUnwindSafe(|| {
+    TLS_COMP_BUF.with(|buf| {
+      let mut b = buf.borrow_mut();
+      b.clear();
+      compress_into(input, &mut b);
+      if b.len() > dst_cap {
+        return 0;
+      }
+      unsafe {
+        copy_nonoverlapping(b.as_ptr(), dst, b.len());
+      }
+      b.len()
+    })
+  }))
+  .unwrap_or(0)
+}
+
+#[inline]
+unsafe fn capi_compress_cached<F: AlpFloat>(
+  tls_enc: &'static LocalKey<RefCell<Encoder<F>>>,
+  src: *const F,
+  len: usize,
+  dst: *mut u8,
+  dst_cap: usize,
+) -> usize {
+  if src.is_null() || dst.is_null() || len == 0 || !is_aligned_to(src) {
+    return 0;
+  }
+  let input = unsafe { from_raw_parts(src, len) };
+  catch_unwind(AssertUnwindSafe(|| {
+    TLS_COMP_BUF.with(|buf| {
+      let mut b = buf.borrow_mut();
+      b.clear();
+      tls_enc.with(|enc| {
+        enc.borrow_mut().compress_into(input, &mut b);
+      });
+      if b.len() > dst_cap {
+        return 0;
+      }
+      unsafe {
+        copy_nonoverlapping(b.as_ptr(), dst, b.len());
+      }
+      b.len()
+    })
+  }))
+  .unwrap_or(0)
+}
+
+#[inline]
+unsafe fn capi_decompress<F: AlpFloat>(
+  src: *const u8,
+  src_len: usize,
+  dst: *mut F,
+  dst_cap: usize,
+) -> usize {
+  if src.is_null() || dst.is_null() || src_len == 0 || dst_cap == 0 || !is_aligned_to(dst) {
+    return 0;
+  }
+  // SAFETY: Caller guarantees src has at least src_len readable bytes, dst has dst_cap writable F slots, non-overlapping
+  let input = unsafe { from_raw_parts(src, src_len) };
+  catch_unwind(AssertUnwindSafe(|| unsafe {
+    decompress_into_raw::<F>(input, dst, dst_cap).unwrap_or(0)
+  }))
+  .unwrap_or(0)
+}
+
 /// Compresses an array of f64 floating-point values with dynamic parameter sampling.
 ///
 /// # Arguments
@@ -171,25 +249,7 @@ pub unsafe extern "C" fn fastalp_compress_f64(
   dst: *mut u8,
   dst_cap: usize,
 ) -> usize {
-  if src.is_null() || dst.is_null() || len == 0 || !is_aligned_to(src) {
-    return 0;
-  }
-  let input = unsafe { from_raw_parts(src, len) };
-  catch_unwind(|| {
-    TLS_COMP_BUF.with(|buf| {
-      let mut b = buf.borrow_mut();
-      b.clear();
-      compress_into(input, &mut b);
-      if b.len() > dst_cap {
-        return 0;
-      }
-      unsafe {
-        copy_nonoverlapping(b.as_ptr(), dst, b.len());
-      }
-      b.len()
-    })
-  })
-  .unwrap_or(0)
+  unsafe { capi_compress(src, len, dst, dst_cap) }
 }
 
 /// Compresses an array of f64 floating-point values by reusing cached parameters from the thread-local encoder.
@@ -234,27 +294,7 @@ pub unsafe extern "C" fn fastalp_compress_cached_f64(
   dst: *mut u8,
   dst_cap: usize,
 ) -> usize {
-  if src.is_null() || dst.is_null() || len == 0 || !is_aligned_to(src) {
-    return 0;
-  }
-  let input = unsafe { from_raw_parts(src, len) };
-  catch_unwind(|| {
-    TLS_COMP_BUF.with(|buf| {
-      let mut b = buf.borrow_mut();
-      b.clear();
-      TLS_ENCODER_F64.with(|enc| {
-        enc.borrow_mut().compress_into(input, &mut b);
-      });
-      if b.len() > dst_cap {
-        return 0;
-      }
-      unsafe {
-        copy_nonoverlapping(b.as_ptr(), dst, b.len());
-      }
-      b.len()
-    })
-  })
-  .unwrap_or(0)
+  unsafe { capi_compress_cached(&TLS_ENCODER_F64, src, len, dst, dst_cap) }
 }
 
 /// Decompresses a byte buffer into an array of f64 floating-point values.
@@ -297,16 +337,7 @@ pub unsafe extern "C" fn fastalp_decompress_f64(
   dst: *mut f64,
   dst_cap: usize,
 ) -> usize {
-  if src.is_null() || dst.is_null() || src_len == 0 || dst_cap == 0 || !is_aligned_to(dst) {
-    return 0;
-  }
-  // SAFETY: Caller guarantees src has at least src_len readable bytes, dst has dst_cap writable f64 slots, non-overlapping
-  // SAFETY: 调用方保证 src 具备至少 src_len 字节可读内存，dst 具备至少 dst_cap 个 f64 可写空间且互不重叠
-  let input = unsafe { from_raw_parts(src, src_len) };
-  catch_unwind(AssertUnwindSafe(|| unsafe {
-    decompress_into_raw::<f64>(input, dst, dst_cap).unwrap_or(0)
-  }))
-  .unwrap_or(0)
+  unsafe { capi_decompress(src, src_len, dst, dst_cap) }
 }
 
 /// Compresses an array of f32 floating-point values with dynamic parameter sampling.
@@ -349,25 +380,7 @@ pub unsafe extern "C" fn fastalp_compress_f32(
   dst: *mut u8,
   dst_cap: usize,
 ) -> usize {
-  if src.is_null() || dst.is_null() || len == 0 || !is_aligned_to(src) {
-    return 0;
-  }
-  let input = unsafe { from_raw_parts(src, len) };
-  catch_unwind(|| {
-    TLS_COMP_BUF.with(|buf| {
-      let mut b = buf.borrow_mut();
-      b.clear();
-      compress_into(input, &mut b);
-      if b.len() > dst_cap {
-        return 0;
-      }
-      unsafe {
-        copy_nonoverlapping(b.as_ptr(), dst, b.len());
-      }
-      b.len()
-    })
-  })
-  .unwrap_or(0)
+  unsafe { capi_compress(src, len, dst, dst_cap) }
 }
 
 /// Compresses an array of f32 floating-point values by reusing cached parameters from the thread-local encoder.
@@ -412,27 +425,7 @@ pub unsafe extern "C" fn fastalp_compress_cached_f32(
   dst: *mut u8,
   dst_cap: usize,
 ) -> usize {
-  if src.is_null() || dst.is_null() || len == 0 || !is_aligned_to(src) {
-    return 0;
-  }
-  let input = unsafe { from_raw_parts(src, len) };
-  catch_unwind(|| {
-    TLS_COMP_BUF.with(|buf| {
-      let mut b = buf.borrow_mut();
-      b.clear();
-      TLS_ENCODER_F32.with(|enc| {
-        enc.borrow_mut().compress_into(input, &mut b);
-      });
-      if b.len() > dst_cap {
-        return 0;
-      }
-      unsafe {
-        copy_nonoverlapping(b.as_ptr(), dst, b.len());
-      }
-      b.len()
-    })
-  })
-  .unwrap_or(0)
+  unsafe { capi_compress_cached(&TLS_ENCODER_F32, src, len, dst, dst_cap) }
 }
 
 /// Decompresses a byte buffer into an array of f32 floating-point values.
@@ -475,14 +468,74 @@ pub unsafe extern "C" fn fastalp_decompress_f32(
   dst: *mut f32,
   dst_cap: usize,
 ) -> usize {
-  if src.is_null() || dst.is_null() || src_len == 0 || dst_cap == 0 || !is_aligned_to(dst) {
+  unsafe { capi_decompress(src, src_len, dst, dst_cap) }
+}
+
+/// Opaque handle for a stateful encoder instance.
+/// Useful when multiple encoders are needed across different threads or streams without TLS.
+pub struct FastAlpEncoder<F: AlpFloat> {
+  inner: Encoder<F>,
+  out_buf: Vec<u8>,
+}
+
+#[inline]
+fn capi_encoder_new<F: AlpFloat>() -> *mut FastAlpEncoder<F> {
+  catch_unwind(AssertUnwindSafe(|| {
+    Box::into_raw(Box::new(FastAlpEncoder {
+      inner: Encoder::new(),
+      out_buf: Vec::new(),
+    }))
+  }))
+  .unwrap_or(null_mut())
+}
+
+#[inline]
+unsafe fn capi_encoder_free<F: AlpFloat>(enc: *mut FastAlpEncoder<F>) {
+  if !enc.is_null() && is_aligned_to(enc) {
+    let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
+      drop(Box::from_raw(enc));
+    }));
+  }
+}
+
+#[inline]
+unsafe fn capi_encoder_reset<F: AlpFloat>(enc: *mut FastAlpEncoder<F>) {
+  if !enc.is_null() && is_aligned_to(enc) {
+    let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
+      (*enc).inner.reset();
+    }));
+  }
+}
+
+#[inline]
+unsafe fn capi_encoder_compress<F: AlpFloat>(
+  enc: *mut FastAlpEncoder<F>,
+  src: *const F,
+  len: usize,
+  dst: *mut u8,
+  dst_cap: usize,
+) -> usize {
+  if enc.is_null()
+    || !is_aligned_to(enc)
+    || src.is_null()
+    || dst.is_null()
+    || len == 0
+    || !is_aligned_to(src)
+  {
     return 0;
   }
-  // SAFETY: Caller guarantees src has at least src_len readable bytes, dst has dst_cap writable f32 slots, non-overlapping
-  // SAFETY: 调用方保证 src 具备至少 src_len 字节可读内存，dst 具备至少 dst_cap 个 f32 可写空间且互不重叠
-  let input = unsafe { from_raw_parts(src, src_len) };
-  catch_unwind(AssertUnwindSafe(|| unsafe {
-    decompress_into_raw::<f32>(input, dst, dst_cap).unwrap_or(0)
+  let enc_ref = unsafe { &mut *enc };
+  let input = unsafe { from_raw_parts(src, len) };
+  catch_unwind(AssertUnwindSafe(|| {
+    enc_ref.out_buf.clear();
+    enc_ref.inner.compress_into(input, &mut enc_ref.out_buf);
+    if enc_ref.out_buf.len() > dst_cap {
+      return 0;
+    }
+    unsafe {
+      copy_nonoverlapping(enc_ref.out_buf.as_ptr(), dst, enc_ref.out_buf.len());
+    }
+    enc_ref.out_buf.len()
   }))
   .unwrap_or(0)
 }
@@ -494,10 +547,7 @@ pub unsafe extern "C" fn fastalp_decompress_f32(
 ///
 /// 双精度 (f64) 状态化独立编码器句柄。
 /// 适用于多线程、多流并发或不依赖 TLS 的场景。
-pub struct FastAlpEncoderF64 {
-  inner: Encoder<f64>,
-  out_buf: Vec<u8>,
-}
+pub type FastAlpEncoderF64 = FastAlpEncoder<f64>;
 
 /// Creates a new stateful f64 encoder handle on the heap.
 /// Caller is responsible for releasing it using `fastalp_encoder_f64_free`.
@@ -514,13 +564,7 @@ pub struct FastAlpEncoderF64 {
 /// 指向新创建编码器的指针；若内存分配失败则返回空指针。
 #[unsafe(no_mangle)]
 pub extern "C" fn fastalp_encoder_f64_new() -> *mut FastAlpEncoderF64 {
-  catch_unwind(|| {
-    Box::into_raw(Box::new(FastAlpEncoderF64 {
-      inner: Encoder::new(),
-      out_buf: Vec::new(),
-    }))
-  })
-  .unwrap_or(null_mut())
+  capi_encoder_new()
 }
 
 /// Frees a stateful f64 encoder instance created by `fastalp_encoder_f64_new`.
@@ -536,11 +580,7 @@ pub extern "C" fn fastalp_encoder_f64_new() -> *mut FastAlpEncoderF64 {
 /// `enc` 必须是由 `fastalp_encoder_f64_new` 返回且尚未被释放的有效指针。
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn fastalp_encoder_f64_free(enc: *mut FastAlpEncoderF64) {
-  if !enc.is_null() && is_aligned_to(enc) {
-    let _ = catch_unwind(|| unsafe {
-      drop(Box::from_raw(enc));
-    });
-  }
+  unsafe { capi_encoder_free(enc) }
 }
 
 /// Resets cached parameters in a stateful f64 encoder handle.
@@ -556,11 +596,7 @@ pub unsafe extern "C" fn fastalp_encoder_f64_free(enc: *mut FastAlpEncoderF64) {
 /// `enc` 必须指向有效的 `FastAlpEncoderF64` 实例。
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn fastalp_encoder_f64_reset(enc: *mut FastAlpEncoderF64) {
-  if !enc.is_null() && is_aligned_to(enc) {
-    let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
-      (*enc).inner.reset();
-    }));
-  }
+  unsafe { capi_encoder_reset(enc) }
 }
 
 /// Compresses an array of f64 values using a stateful encoder handle, reusing cached parameters.
@@ -602,29 +638,7 @@ pub unsafe extern "C" fn fastalp_encoder_f64_compress(
   dst: *mut u8,
   dst_cap: usize,
 ) -> usize {
-  if enc.is_null()
-    || !is_aligned_to(enc)
-    || src.is_null()
-    || dst.is_null()
-    || len == 0
-    || !is_aligned_to(src)
-  {
-    return 0;
-  }
-  let enc_ref = unsafe { &mut *enc };
-  let input = unsafe { from_raw_parts(src, len) };
-  catch_unwind(AssertUnwindSafe(|| {
-    enc_ref.out_buf.clear();
-    enc_ref.inner.compress_into(input, &mut enc_ref.out_buf);
-    if enc_ref.out_buf.len() > dst_cap {
-      return 0;
-    }
-    unsafe {
-      copy_nonoverlapping(enc_ref.out_buf.as_ptr(), dst, enc_ref.out_buf.len());
-    }
-    enc_ref.out_buf.len()
-  }))
-  .unwrap_or(0)
+  unsafe { capi_encoder_compress(enc, src, len, dst, dst_cap) }
 }
 
 /// Opaque handle for a stateful single-precision (f32) encoder instance.
@@ -634,10 +648,7 @@ pub unsafe extern "C" fn fastalp_encoder_f64_compress(
 ///
 /// 单精度 (f32) 状态化独立编码器句柄。
 /// 适用于多线程、多流并发或不依赖 TLS 的场景。
-pub struct FastAlpEncoderF32 {
-  inner: Encoder<f32>,
-  out_buf: Vec<u8>,
-}
+pub type FastAlpEncoderF32 = FastAlpEncoder<f32>;
 
 /// Creates a new stateful f32 encoder handle on the heap.
 /// Caller is responsible for releasing it using `fastalp_encoder_f32_free`.
@@ -654,13 +665,7 @@ pub struct FastAlpEncoderF32 {
 /// 指向新创建编码器的指针；若内存分配失败则返回空指针。
 #[unsafe(no_mangle)]
 pub extern "C" fn fastalp_encoder_f32_new() -> *mut FastAlpEncoderF32 {
-  catch_unwind(|| {
-    Box::into_raw(Box::new(FastAlpEncoderF32 {
-      inner: Encoder::new(),
-      out_buf: Vec::new(),
-    }))
-  })
-  .unwrap_or(null_mut())
+  capi_encoder_new()
 }
 
 /// Frees a stateful f32 encoder instance created by `fastalp_encoder_f32_new`.
@@ -676,11 +681,7 @@ pub extern "C" fn fastalp_encoder_f32_new() -> *mut FastAlpEncoderF32 {
 /// `enc` 必须是由 `fastalp_encoder_f32_new` 返回且尚未被释放的有效指针。
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn fastalp_encoder_f32_free(enc: *mut FastAlpEncoderF32) {
-  if !enc.is_null() && is_aligned_to(enc) {
-    let _ = catch_unwind(|| unsafe {
-      drop(Box::from_raw(enc));
-    });
-  }
+  unsafe { capi_encoder_free(enc) }
 }
 
 /// Resets cached parameters in a stateful f32 encoder handle.
@@ -696,11 +697,7 @@ pub unsafe extern "C" fn fastalp_encoder_f32_free(enc: *mut FastAlpEncoderF32) {
 /// `enc` 必须指向有效的 `FastAlpEncoderF32` 实例。
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn fastalp_encoder_f32_reset(enc: *mut FastAlpEncoderF32) {
-  if !enc.is_null() && is_aligned_to(enc) {
-    let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
-      (*enc).inner.reset();
-    }));
-  }
+  unsafe { capi_encoder_reset(enc) }
 }
 
 /// Compresses an array of f32 values using a stateful encoder handle, reusing cached parameters.
@@ -742,27 +739,5 @@ pub unsafe extern "C" fn fastalp_encoder_f32_compress(
   dst: *mut u8,
   dst_cap: usize,
 ) -> usize {
-  if enc.is_null()
-    || !is_aligned_to(enc)
-    || src.is_null()
-    || dst.is_null()
-    || len == 0
-    || !is_aligned_to(src)
-  {
-    return 0;
-  }
-  let enc_ref = unsafe { &mut *enc };
-  let input = unsafe { from_raw_parts(src, len) };
-  catch_unwind(AssertUnwindSafe(|| {
-    enc_ref.out_buf.clear();
-    enc_ref.inner.compress_into(input, &mut enc_ref.out_buf);
-    if enc_ref.out_buf.len() > dst_cap {
-      return 0;
-    }
-    unsafe {
-      copy_nonoverlapping(enc_ref.out_buf.as_ptr(), dst, enc_ref.out_buf.len());
-    }
-    enc_ref.out_buf.len()
-  }))
-  .unwrap_or(0)
+  unsafe { capi_encoder_compress(enc, src, len, dst, dst_cap) }
 }

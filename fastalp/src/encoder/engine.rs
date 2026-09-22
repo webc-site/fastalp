@@ -11,7 +11,7 @@ use crate::{
     delta::encode_delta,
     exception::{Exception, exceptions_byte_size},
     kernel::encode_slice,
-    outlier::try_prune_outliers,
+    outlier::{apply_target_bw, try_prune_outliers},
     standard::encode_standard,
     state::CachedTargetBw,
   },
@@ -104,38 +104,6 @@ unsafe fn encode_pass<F: AlpFloat>(
       params.use_div,
       exceptions,
     )
-  }
-}
-
-/// Applies outlier pruning for a specific target bit-width (DRY helper).
-/// 根据指定目标位宽应用离群值剪枝并更新异常字典
-#[inline(always)]
-fn apply_target_bw<F: AlpFloat>(
-  slice: &[F],
-  encoded_ints: &mut [F::Int],
-  base: F::Int,
-  target_bw: u8,
-  exceptions: &mut Vec<Exception<F::RawBits>>,
-) {
-  let max_allowed = if target_bw == 0 {
-    0u64
-  } else {
-    (1u64 << target_bw) - 1
-  };
-  let had_prev = !exceptions.is_empty();
-  for (pos, (&v, val_mut)) in slice.iter().zip(encoded_ints.iter_mut()).enumerate() {
-    let diff = F::int_diff_to_u64(*val_mut, base);
-    if diff > max_allowed {
-      exceptions.push(Exception {
-        pos,
-        bits: v.to_raw_bits(),
-      });
-      *val_mut = base;
-    }
-  }
-  if had_prev && exceptions.len() > 1 {
-    exceptions.sort_unstable_by_key(|e| e.pos);
-    exceptions.dedup_by_key(|e| e.pos);
   }
 }
 
@@ -248,6 +216,14 @@ pub(crate) fn compress_into_engine<F: AlpFloat>(
   let is_large = count > u16::MAX as usize;
   let mut for_bit_width = F::bits_needed(max_offset);
   let mut did_pre_prune = false;
+
+  // Pre-fill existing exceptions with base to prevent double counting in outlier histogram
+  // 在离群值直方图统计前，将已有异常位置预先置为基准值 base，避免其极大差值被误判为新增离群点导致双重计数
+  for exc in exceptions.iter() {
+    unsafe {
+      *encoded_ints.get_unchecked_mut(exc.pos) = base;
+    }
+  }
 
   // 5. Outlier pre-pruning: narrow bit-width and eliminate isolated spikes
   // 5. 离群值预剪枝：若位宽较高先尝试剪枝收窄位宽并消除尖峰

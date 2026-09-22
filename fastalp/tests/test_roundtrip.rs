@@ -725,10 +725,14 @@ fn test_dictionary_mode_roundtrip() -> fastalp::Result<()> {
     assert_eq!(orig.to_bits(), dec.to_bits());
   }
 
-  // 2. 两个交替浮点数（0.0 与 1.0），无连续重复，字典压缩位宽应为 1
+  // 2. 两个交替浮点数（高精度非整数），无连续重复，字典压缩位宽应为 1
   let mut alt_data = Vec::with_capacity(1024);
   for i in 0..1024 {
-    alt_data.push(if i % 2 == 0 { 0.0f64 } else { 1.0f64 });
+    alt_data.push(if i % 2 == 0 {
+      1.123456789012345f64
+    } else {
+      9.876543210987654f64
+    });
   }
   let comp_alt = compress(&alt_data);
   let hdr_alt = read_header(&comp_alt)?;
