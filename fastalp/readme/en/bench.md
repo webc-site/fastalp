@@ -15,14 +15,14 @@ Tested against standard floating-point and time-series codecs across all 37 data
 
 | Codec | Category | Decomp Throughput (GeoMean) | vs C++ Decomp | End-to-End Comp (GeoMean) | Pure Kernel (GeoMean) | vs C++ Pure Kernel | GeoMean Ratio |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **fastalp (Rust)** | Specialized Float | **24.8 GB/s** | **1.35x vs C++** | **1.6 GB/s (2.07x faster)** | **6.4 GB/s** | **1.20x vs C++** | **7.18x** |
-| **C++ ALP** (Paper Reference) | Specialized Float | **18.3 GB/s** | Baseline (1.0x) | **0.8 GB/s** | **5.3 GB/s** | Baseline (1.0x) | **5.65x** |
-| Pcodec (pco) | Specialized Float | **1.8 GB/s** | 0.10x (10.0x slower) | **0.2 GB/s** | — | — | **8.81x** |
-| Zstd (level 3) | General Byte | **1.4 GB/s** | 0.08x (12.8x slower) | **0.5 GB/s** | — | — | **6.07x** |
-| LZ4 (lz4_flex) | General Byte | **5.0 GB/s** | 0.27x (3.7x slower) | **2.0 GB/s** | — | — | **3.89x** |
-| Snappy (snap) | General Byte | **4.6 GB/s** | 0.25x (4.0x slower) | **2.5 GB/s** | — | — | **3.05x** |
-| Chimp128 (ts+val) | Specialized Float | **1.0 GB/s** | 0.05x (18.6x slower) | **1.3 GB/s** | — | — | **5.05x** |
-| Gorilla (ts+val) | Specialized Float | **1.2 GB/s** | 0.07x (15.3x slower) | **1.9 GB/s** | — | — | **4.41x** |
+| **fastalp (Rust)** | Specialized Float | **24.8 GB/s** | **1.39x vs C++** | **1.5 GB/s (3.83x faster)** | **6.6 GB/s** | **2.05x vs C++** | **7.25x** |
+| **C++ ALP** (Paper Reference) | Specialized Float | **17.9 GB/s** | Baseline (1.0x) | **0.4 GB/s** | **3.2 GB/s** | Baseline (1.0x) | **5.65x** |
+| Pcodec (pco) | Specialized Float | **1.5 GB/s** | 0.09x (11.7x slower) | **0.2 GB/s** | — | — | **6.85x** |
+| Zstd (level 3) | General Byte | **1.1 GB/s** | 0.06x (17.0x slower) | **0.4 GB/s** | — | — | **4.99x** |
+| LZ4 (lz4_flex) | General Byte | **4.2 GB/s** | 0.24x (4.2x slower) | **1.5 GB/s** | — | — | **3.27x** |
+| Snappy (snap) | General Byte | **3.9 GB/s** | 0.22x (4.5x slower) | **2.0 GB/s** | — | — | **2.85x** |
+| Chimp128 (ts+val) | Specialized Float | **0.9 GB/s** | 0.05x (19.9x slower) | **1.2 GB/s** | — | — | **5.19x** |
+| Gorilla (ts+val) | Specialized Float | **1.1 GB/s** | 0.06x (16.8x slower) | **1.8 GB/s** | — | — | **4.24x** |
 
 ---
 
@@ -39,11 +39,11 @@ Comprehensive 37-dataset side-by-side evaluation on identical hardware (providin
 
 | Benchmark Metric / Operational Mode | fastalp (Rust) | C++ ALP (Reference) | Speedup vs C++ | Measurement Methodology & Scope |
 | :--- | :---: | :---: | :---: | :--- |
-| **Benchmark Decompression Throughput** | GeoMean **24.8 GB/s**<br>ArithMean **29.45 GB/s** | GeoMean 18.3 GB/s<br>ArithMean 18.74 GB/s | GeoMean **1.35x vs C++**<br>ArithMean **1.57x vs C++** | Evaluated across all 37 datasets with SIMD fusion and wide unaligned loads |
-| **Pure Encoding Throughput (No Sampling)** | GeoMean **6.4 GB/s**<br>ArithMean **7.31 GB/s** | GeoMean 5.3 GB/s<br>ArithMean 5.70 GB/s | GeoMean **1.20x vs C++**<br>ArithMean **1.28x vs C++** | Bypasses parameter sampling; tests pure float-to-int transform and dense bitpacking (Paper benchmark scope) |
-| **End-to-End Compression (w/ Sampling)** | GeoMean **1.6 GB/s**<br>ArithMean **2.17 GB/s** | GeoMean 0.8 GB/s<br>ArithMean 0.76 GB/s | GeoMean **2.07x vs C++**<br>ArithMean **2.85x vs C++** | Real-world ingestion pipeline; 3-tier cascade pruning eliminates exhaustive search overhead |
+| **Benchmark Decompression Throughput** | GeoMean **24.8 GB/s**<br>ArithMean **27.86 GB/s** | GeoMean 17.9 GB/s<br>ArithMean 18.43 GB/s | GeoMean **1.39x vs C++**<br>ArithMean **1.51x vs C++** | Evaluated across all 37 datasets with SIMD fusion and wide unaligned loads |
+| **Pure Encoding Throughput (No Sampling)** | GeoMean **6.6 GB/s**<br>ArithMean **7.45 GB/s** | GeoMean 3.2 GB/s<br>ArithMean 4.54 GB/s | GeoMean **2.05x vs C++**<br>ArithMean **1.64x vs C++** | Bypasses parameter sampling; tests pure float-to-int transform and dense bitpacking (Paper benchmark scope) |
+| **End-to-End Compression (w/ Sampling)** | GeoMean **1.5 GB/s**<br>ArithMean **1.88 GB/s** | GeoMean 0.4 GB/s<br>ArithMean 0.48 GB/s | GeoMean **3.83x vs C++**<br>ArithMean **3.89x vs C++** | Real-world ingestion pipeline; 3-tier cascade pruning eliminates exhaustive search overhead |
 | **Stateful Streaming Cache (Parameter Reuse)** | **15 ~ 24+ GB/s** | — | **Steady-State Stream** | Caches derived `(exp, fac)` models across consecutive 1024-element blocks via `Encoder` |
-| **Compression Ratio** | GeoMean **7.18x**<br>Total Bytes **3.65x** | GeoMean 5.65x<br>Total Bytes 3.14x | GeoMean **+27% higher**<br>Total Bytes **+16% higher** | Evaluated across all 37 datasets; Delta-ALP and division reconstruction significantly reduce dynamic bit-widths |
+| **Compression Ratio** | GeoMean **7.25x**<br>Total Bytes **3.75x** | GeoMean 5.65x<br>Total Bytes 3.14x | GeoMean **+28% higher**<br>Total Bytes **+19% higher** | Evaluated across all 37 datasets; Delta-ALP and division reconstruction significantly reduce dynamic bit-widths |
 
 ---
 
@@ -51,12 +51,12 @@ Comprehensive 37-dataset side-by-side evaluation on identical hardware (providin
 
 | Business Scenario Slice | Dataset Scale | fastalp<br>(Decomp / Comp / Ratio) | C++ ALP<br>(Decomp / Comp / Ratio) | Pcodec<br>(Decomp / Comp / Ratio) | Baseline Codec<br>(Decomp / Comp / Ratio) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Decimal Environmental & Hydrology IoT** | 11 sets (11,264 pts) | **22.7 GB/s**<br>**2.9 GB/s**<br>**3.48x** | 17.7 GB/s<br>0.8 GB/s<br>3.16x | 1.65 GB/s<br>0.2 GB/s<br>3.30x | LZ4:<br>7.4 GB/s<br>1.8 GB/s<br>1.78x |
-| **Quantitative Trading & Asset Quotes** | 7 sets (7,168 pts) | **21.4 GB/s**<br>**2.9 GB/s**<br>**4.86x** | 19.9 GB/s<br>0.8 GB/s<br>3.82x | 1.56 GB/s<br>0.2 GB/s<br>4.17x | Snappy:<br>14.0 GB/s<br>3.9 GB/s<br>2.22x |
-| **Geospatial & GPS Trajectory Tracking** | 5 sets (5,120 pts) | **17.4 GB/s**<br>**0.8 GB/s**<br>**2.12x** | 15.3 GB/s<br>0.7 GB/s<br>1.78x | 2.01 GB/s<br>0.2 GB/s<br>2.27x | Snappy:<br>31.9 GB/s<br>8.2 GB/s<br>1.40x |
-| **Healthcare Claims & Pharma Pricing** | 5 sets (5,120 pts) | **25.0 GB/s**<br>**1.7 GB/s**<br>**2.15x** | 18.5 GB/s<br>0.8 GB/s<br>2.19x | 2.04 GB/s<br>0.2 GB/s<br>2.16x | Zstd:<br>1.0 GB/s<br>0.4 GB/s<br>1.99x |
-| **Public Demographics & Civic Economics** | 6 sets (6,144 pts) | **75.7 GB/s**<br>**2.1 GB/s**<br>**10.95x** | 21.6 GB/s<br>0.8 GB/s<br>9.50x | 2.81 GB/s<br>0.3 GB/s<br>8.57x | Zstd:<br>3.2 GB/s<br>2.1 GB/s<br>11.24x |
-| **River Discharge, Marine Tides & Storage** | 3 sets (3,072 pts) | **24.9 GB/s**<br>**1.3 GB/s**<br>**10.54x** | 20.4 GB/s<br>0.8 GB/s<br>4.65x | 2.41 GB/s<br>0.3 GB/s<br>25.86x | Zstd:<br>6.4 GB/s<br>1.5 GB/s<br>13.13x |
+| **Decimal Environmental & Hydrology IoT** | 11 sets (11,264 pts) | **22.8 GB/s**<br>**2.3 GB/s**<br>**3.49x** | 18.9 GB/s<br>0.6 GB/s<br>3.16x | 1.39 GB/s<br>0.2 GB/s<br>3.22x | LZ4:<br>9.4 GB/s<br>1.5 GB/s<br>1.69x |
+| **Quantitative Trading & Asset Quotes** | 7 sets (7,168 pts) | **21.4 GB/s**<br>**2.0 GB/s**<br>**4.86x** | 18.0 GB/s<br>0.5 GB/s<br>3.82x | 1.42 GB/s<br>0.2 GB/s<br>4.07x | Snappy:<br>13.2 GB/s<br>3.4 GB/s<br>2.13x |
+| **Geospatial & GPS Trajectory Tracking** | 5 sets (5,120 pts) | **17.5 GB/s**<br>**0.8 GB/s**<br>**2.12x** | 14.2 GB/s<br>0.3 GB/s<br>1.78x | 1.54 GB/s<br>0.2 GB/s<br>2.25x | Snappy:<br>32.4 GB/s<br>6.9 GB/s<br>1.74x |
+| **Healthcare Claims & Pharma Pricing** | 5 sets (5,120 pts) | **28.6 GB/s**<br>**1.7 GB/s**<br>**2.40x** | 17.1 GB/s<br>0.5 GB/s<br>2.19x | 1.77 GB/s<br>0.2 GB/s<br>2.16x | Zstd:<br>0.8 GB/s<br>0.3 GB/s<br>1.99x |
+| **Public Demographics & Civic Economics** | 6 sets (6,144 pts) | **59.6 GB/s**<br>**2.4 GB/s**<br>**10.95x** | 22.5 GB/s<br>0.4 GB/s<br>9.50x | 2.83 GB/s<br>0.3 GB/s<br>8.57x | Zstd:<br>2.7 GB/s<br>2.0 GB/s<br>11.24x |
+| **River Discharge, Marine Tides & Storage** | 3 sets (3,072 pts) | **25.5 GB/s**<br>**1.3 GB/s**<br>**10.54x** | 19.7 GB/s<br>0.2 GB/s<br>4.65x | 1.28 GB/s<br>0.2 GB/s<br>9.93x | Zstd:<br>1.1 GB/s<br>0.4 GB/s<br>5.00x |
 
 ### C++ ALP Benchmark Methodology & Calibration
 
@@ -65,15 +65,15 @@ Comprehensive 37-dataset side-by-side evaluation on identical hardware (providin
 - **Unified Methodology Notes**:
   - **100% Unaltered Core Logic**: Evaluated directly against the original core algorithm (`include/` directory) without modification, preserving the authors' SIMD and inverse mapping logic.
   - **End-to-End Pipeline vs Pure Kernel Throughput**:
-    - **Pure Kernel (Paper methodology, C++ 5.3 GB/s vs fastalp 6.4 GB/s)**:<br>
-      C++ ALP official benchmark calls model initialization outside the measurement loop, assuming optimal exponents and factors are known beforehand, achieving **5.3 GB/s** geometric mean throughput (arithmetic mean 5.70 GB/s); under the exact same benchmark conditions, fastalp achieves **6.4 GB/s** pure encoding throughput (**1.20x speedup vs C++**; arithmetic mean **7.31 GB/s**, **1.28x vs C++**).
-    - **End-to-End Compression (Real-world metric, C++ 0.8 GB/s vs fastalp 1.6 GB/s)**:<br>
-      In real-world time-series ingestion, incoming blocks require adaptive parameter sampling. When sampling is measured within the timing loop, C++ ALP unpruned exhaustive search accounts for >80% of execution time, yielding an end-to-end throughput of **0.8 GB/s** (arithmetic mean 0.76 GB/s); fastalp performs complete end-to-end compression including adaptive parameter sampling from scratch, achieving **1.6 GB/s** geometric mean end-to-end throughput (**2.07x faster than C++ ALP**; arithmetic mean **2.17 GB/s**, **2.85x vs C++**); when hitting stateful parameter cache, pure kernel throughput reaches **15 ~ 24+ GB/s**.
-    - **Decompression Throughput (GeoMean 24.8 GB/s vs 18.3 GB/s)**:<br>
-      Utilizing branchless SIMD register pipelines and L1D stack LUTs, fastalp attains **24.8 GB/s** geometric mean decompression throughput, outperforming C++ ALP **18.3 GB/s** (**1.35x faster**; arithmetic mean **29.45 GB/s** vs **18.74 GB/s**, **1.57x faster**).
+    - **Pure Kernel (Paper methodology, C++ 3.2 GB/s vs fastalp 6.6 GB/s)**:<br>
+      C++ ALP official benchmark calls model initialization outside the measurement loop, assuming optimal exponents and factors are known beforehand, achieving **3.2 GB/s** geometric mean throughput (arithmetic mean 4.54 GB/s); under the exact same benchmark conditions, fastalp achieves **6.6 GB/s** pure encoding throughput (**2.05x speedup vs C++**; arithmetic mean **7.45 GB/s**, **1.64x vs C++**).
+    - **End-to-End Compression (Real-world metric, C++ 0.4 GB/s vs fastalp 1.5 GB/s)**:<br>
+      In real-world time-series ingestion, incoming blocks require adaptive parameter sampling. When sampling is measured within the timing loop, C++ ALP unpruned exhaustive search accounts for >80% of execution time, yielding an end-to-end throughput of **0.4 GB/s** (arithmetic mean 0.48 GB/s); fastalp performs complete end-to-end compression including adaptive parameter sampling from scratch, achieving **1.5 GB/s** geometric mean end-to-end throughput (**3.83x faster than C++ ALP**; arithmetic mean **1.88 GB/s**, **3.89x vs C++**); when hitting stateful parameter cache, pure kernel throughput reaches **15 ~ 24+ GB/s**.
+    - **Decompression Throughput (GeoMean 24.8 GB/s vs 17.9 GB/s)**:<br>
+      Utilizing branchless SIMD register pipelines and L1D stack LUTs, fastalp attains **24.8 GB/s** geometric mean decompression throughput, outperforming C++ ALP **17.9 GB/s** (**1.39x faster**; arithmetic mean **27.86 GB/s** vs **18.43 GB/s**, **1.51x faster**).
   - **Full 37 Dataset Coverage & 100% Reproducibility**:
     - Evaluated across all 31 public datasets from the original C++ ALP paper plus 6 real-world physical observation time-series (NOAA tides, USGS hydrology and global meteorology), totaling 37 real benchmarks.
-    - All algorithms are evaluated across all 37 datasets using Geometric Mean without sampling bias. fastalp achieves an overall geometric mean compression ratio of **7.18x** (compared to C++ ALP **5.65x**).
+    - All algorithms are evaluated across all 37 datasets using Geometric Mean without sampling bias. fastalp achieves an overall geometric mean compression ratio of **7.25x** (compared to C++ ALP **5.65x**).
 
 ### Comprehensive Dataset Coverage & Sources
 

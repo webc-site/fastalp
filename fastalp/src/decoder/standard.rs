@@ -1,3 +1,5 @@
+use core::{mem::MaybeUninit, slice::from_raw_parts_mut};
+
 use crate::{
   bitpack::{AlpDecoder, bitunpack_core_generic, packed_byte_size},
   error::{Error, Result},
@@ -69,11 +71,7 @@ unsafe fn decode_standard_inner<F: AlpFloat, D: AlpDecoder<F>>(
     let val = decoder.decode_offset(0);
     // SAFETY: 调用方保证 dst_ptr 具有至少 count 个连续有效可写槽位；采用 MaybeUninit 严守 Rust 内存安全模型
     unsafe {
-      core::slice::from_raw_parts_mut(
-        dst_ptr.cast::<core::mem::MaybeUninit<F>>(),
-        count,
-      )
-      .fill(core::mem::MaybeUninit::new(val));
+      from_raw_parts_mut(dst_ptr.cast::<MaybeUninit<F>>(), count).fill(MaybeUninit::new(val));
     }
     return Ok(());
   }

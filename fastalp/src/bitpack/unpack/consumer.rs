@@ -1,6 +1,8 @@
 use core::{
   marker::PhantomData,
+  mem::MaybeUninit,
   ptr::{copy_nonoverlapping, write_bytes},
+  slice::from_raw_parts_mut,
 };
 
 use super::decoder::AlpDecoder;
@@ -294,16 +296,9 @@ impl<F: AlpFloat, D: AlpDecoder<F>> AlpConsumer<F> for AlpDeltaConsumer<F, D> {
   unsafe fn consume_zeros(&mut self, count: usize, dst_ptr: *mut F) {
     if self.min_delta == F::ZERO_INT {
       let val = self.decoder.decode_int(self.curr);
-      let full_8 = count / 8;
-      for g in 0..full_8 {
-        unsafe {
-          write_8!(dst_ptr.add(g * 8), _k => val);
-        }
-      }
-      for i in (full_8 * 8)..count {
-        unsafe {
-          *dst_ptr.add(i) = val;
-        }
+      // SAFETY: 调用方保证 dst_ptr 具有至少 count 个连续有效槽位；采用 MaybeUninit 严守内存模型
+      unsafe {
+        from_raw_parts_mut(dst_ptr.cast::<MaybeUninit<F>>(), count).fill(MaybeUninit::new(val));
       }
     } else {
       let m1 = self.m_steps[0];
@@ -390,16 +385,9 @@ impl<F: AlpFloat, D: AlpDecoder<F>> AlpConsumer<F> for AlpDeltaZeroMinConsumer<F
   #[inline(always)]
   unsafe fn consume_zeros(&mut self, count: usize, dst_ptr: *mut F) {
     let val = self.decoder.decode_int(self.curr);
-    let full_8 = count / 8;
-    for g in 0..full_8 {
-      unsafe {
-        write_8!(dst_ptr.add(g * 8), _k => val);
-      }
-    }
-    for i in (full_8 * 8)..count {
-      unsafe {
-        *dst_ptr.add(i) = val;
-      }
+    // SAFETY: 调用方保证 dst_ptr 具有至少 count 个连续有效槽位；采用 MaybeUninit 严守内存模型
+    unsafe {
+      from_raw_parts_mut(dst_ptr.cast::<MaybeUninit<F>>(), count).fill(MaybeUninit::new(val));
     }
   }
 }

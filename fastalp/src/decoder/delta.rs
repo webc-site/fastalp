@@ -1,3 +1,5 @@
+use core::{mem::MaybeUninit, slice::from_raw_parts_mut};
+
 use crate::{
   bitpack::{
     AlpDecoder, AlpDeltaConsumer, AlpDeltaZeroMinConsumer, bitunpack_core_consumer,
@@ -88,11 +90,8 @@ unsafe fn decode_delta_inner<F: AlpFloat, D: AlpDecoder<F>>(
     if min_delta == F::ZERO_INT {
       // SAFETY: 调用方保证 dst_ptr 具有至少 count 个槽位；采用 MaybeUninit 严守 Rust 内存安全模型
       unsafe {
-        core::slice::from_raw_parts_mut(
-          dst_ptr.add(1).cast::<core::mem::MaybeUninit<F>>(),
-          rest_count,
-        )
-        .fill(core::mem::MaybeUninit::new(first_val));
+        from_raw_parts_mut(dst_ptr.add(1).cast::<MaybeUninit<F>>(), rest_count)
+          .fill(MaybeUninit::new(first_val));
       }
     } else {
       let m1 = min_delta;

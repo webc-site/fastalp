@@ -152,7 +152,7 @@ pub(crate) unsafe fn expand_repeats<F: AlpFloat>(
         if word == 0 {
           copy_nonoverlapping(non_repeats.add(1), dst_ptr.add(1), 63);
           src_idx += 63;
-        } else if word == u64::MAX {
+        } else if word == u64::MAX || word == !1u64 {
           let p = *non_repeats;
           for chunk in 0..8 {
             write_8!(dst_ptr.add(chunk * 8), _k => p);
@@ -269,11 +269,10 @@ unsafe fn decode_dict_raw<F: AlpFloat>(
 
   if bit_width == 0 {
     let single_val = dict[0];
-    // SAFETY: 调用方保证 dst_ptr 具有至少 count 个连续有效可写槽位
+    // SAFETY: 调用方保证 dst_ptr 具有至少 count 个连续有效可写槽位；采用 MaybeUninit 严守 Rust 内存安全模型
     unsafe {
-      for i in 0..count {
-        dst_ptr.add(i).write(single_val);
-      }
+      from_raw_parts_mut(dst_ptr.cast::<MaybeUninit<F>>(), count)
+        .fill(MaybeUninit::new(single_val));
     }
     return Ok(());
   }
