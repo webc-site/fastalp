@@ -1,8 +1,10 @@
+#[path = "common/samples.rs"]
+mod common;
+
 use std::{
-  env, fs,
+  fs,
   hint::black_box,
-  io::{BufRead, BufReader},
-  path::{Path, PathBuf},
+  path::PathBuf,
   process::exit,
   time::{Duration, Instant},
 };
@@ -75,24 +77,6 @@ struct CodecJsonReport {
   micro_benchmarks: MicroBenchmarksSection,
 }
 
-fn load_csv(path: &Path) -> Vec<f64> {
-  let Ok(f) = fs::File::open(path) else {
-    return Vec::new();
-  };
-  BufReader::new(f)
-    .lines()
-    .map_while(Result::ok)
-    .filter_map(|line| {
-      let s = line.trim();
-      if s.is_empty() || s.starts_with('#') || s.starts_with("column") {
-        None
-      } else {
-        s.parse::<f64>().ok()
-      }
-    })
-    .collect()
-}
-
 fn bench_micro(data: &[f64]) -> MicroBenchmarkResult {
   let iters = 1000;
   let mut comp_buf = Vec::with_capacity(max_compressed_size::<f64>(data.len()));
@@ -160,46 +144,18 @@ fn bench_micro(data: &[f64]) -> MicroBenchmarkResult {
 }
 
 fn main() {
-  let alp_dir = env::var("ALP_DIR")
-    .map(PathBuf::from)
-    .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../ALP"));
-
-  let candidates = [
-    alp_dir.join("data/samples"),
-    PathBuf::from("../ALP/data/samples"),
-    PathBuf::from("../../ALP/data/samples"),
-    PathBuf::from("ALP/data/samples"),
-  ];
-
-  let Some(samples_dir) = candidates.into_iter().find(|p| p.exists()) else {
+  let samples = common::load_paper_samples();
+  if samples.is_empty() {
     eprintln!(
-      "Error: samples directory not found. Please set ALP_DIR or place ALP repository beside workspace."
-    );
-    exit(1);
-  };
-
-  let Ok(dir_entries) = fs::read_dir(&samples_dir) else {
-    eprintln!("Error: failed to read samples directory: {:?}", samples_dir);
-    exit(1);
-  };
-
-  let mut entries: Vec<_> = dir_entries
-    .filter_map(|r| r.ok())
-    .filter(|e| e.path().extension().is_some_and(|ext| ext == "csv"))
-    .collect();
-  entries.sort_by_key(|a| a.file_name());
-
-  if entries.is_empty() {
-    eprintln!(
-      "Error: Found samples dir {:?} but 0 valid CSV datasets.",
-      samples_dir
+      "Error: samples directory not found or empty: {:?}",
+      common::samples_dir()
     );
     exit(1);
   }
 
   println!(
     "Running fastalp benchmark across all {} datasets (fair zero-alloc pipeline)...",
-    entries.len()
+    samples.len()
   );
 
   let mut dataset_items = Vec::new();
@@ -213,14 +169,7 @@ fn main() {
   let mut dec_buf = Vec::with_capacity(1024);
   let mut encoder = Encoder::<f64>::with_capacity(1024);
 
-  for entry in &entries {
-    let path = entry.path();
-    let name = path.file_stem().unwrap().to_string_lossy().to_string();
-    let data = load_csv(&path);
-    if data.is_empty() {
-      continue;
-    }
-
+  for (name, data) in &samples {
     let raw_bytes = data.len() * 8;
     total_raw_bytes += raw_bytes;
 
@@ -228,7 +177,7 @@ fn main() {
     encoder.reset();
     for _ in 0..500 {
       comp_buf.clear();
-      compress_into(&data, &mut comp_buf);
+      compress_into(data, &mut comp_buf);
       dec_buf.clear();
       let _ = decompress_into::<f64>(&comp_buf, &mut dec_buf);
     }
@@ -240,7 +189,7 @@ fn main() {
       let start_enc = Instant::now();
       for _ in 0..comp_iters {
         comp_buf.clear();
-        compress_into(&data, &mut comp_buf);
+        compress_into(data, &mut comp_buf);
         black_box(&comp_buf);
       }
       best_enc_dur = best_enc_dur.min(start_enc.elapsed());
@@ -250,13 +199,13 @@ fn main() {
     // Measure Pure Encoding Kernel Without Sampling (Reusing Cached Parameters, min of 5 rounds of 1000 iters)
     encoder.reset();
     comp_buf.clear();
-    encoder.compress_into(&data, &mut comp_buf); // First pass establishes cached parameters
+    encoder.compress_into(data, &mut comp_buf); // First pass establishes cached parameters
     let mut best_enc_kern_dur = Duration::MAX;
     for _ in 0..5 {
       let start_enc_kern = Instant::now();
       for _ in 0..comp_iters {
         comp_buf.clear();
-        encoder.compress_into(&data, &mut comp_buf);
+        encoder.compress_into(data, &mut comp_buf);
         black_box(&comp_buf);
       }
       best_enc_kern_dur = best_enc_kern_dur.min(start_enc_kern.elapsed());
@@ -298,7 +247,7 @@ fn main() {
     );
 
     dataset_items.push(DatasetItem {
-      name,
+      name: name.clone(),
       raw_bytes,
       compressed_bytes: comp_bytes,
       ratio: round4(ratio),
@@ -310,7 +259,7 @@ fn main() {
     });
   }
 
-  let n = entries.len() as f64;
+  let n = samples.len() as f64;
   let avg_enc = sum_enc / n;
   let avg_enc_kern = sum_enc_kern / n;
   let avg_dec = sum_dec / n;

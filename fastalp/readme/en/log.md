@@ -1,5 +1,14 @@
 ## Changelog
 
+### v0.1.47
+
+- **Streamlined Example Codebase & Unified Relative Dataset Paths**:
+  Refactored all benchmark and verification binaries in `examples/` (`bench_all_codecs`, `bench_all_37`, `check_dec`, `check_schemes`, `profile_steps`). Extracted shared `examples/common` module to consolidate relative dataset resolution and CSV ingestion, eliminating repetitive PathBuf candidate searching across binaries.
+- **Zero `#[allow(...)]` Across Codebase & Modern Rust Idioms**:
+  Completely eradicated all `#[allow(...)]` lint suppressions across the repository. Refactored kernel/engine signatures using clean parameter objects and slice iterators, passing strict nightly Clippy checks with zero warnings.
+- **Comprehensive Boundary & Fault-Tolerance Test Coverage**:
+  Added comprehensive tests covering IEEE 754 edge cases (+0/-0, NaN, Inf), slice lengths from 0 to 2049, length tag transitions, exception thresholds, and defensive parsing against corrupted bitstreams.
+
 ### v0.1.46
 
 - **Benchmark Suite Upgraded with Real-World Industrial Datasets**:

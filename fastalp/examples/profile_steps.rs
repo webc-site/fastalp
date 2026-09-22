@@ -1,24 +1,11 @@
-use std::{fs, path::PathBuf, time::Instant};
+#[path = "common/mod.rs"]
+mod common;
+
+use std::time::Instant;
 
 use fastalp::Encoder;
 
-fn load_csv(path: &PathBuf) -> Vec<f64> {
-  let content = fs::read_to_string(path).expect("Failed to read CSV");
-  content
-    .lines()
-    .filter_map(|line| {
-      let trimmed = line.trim();
-      if trimmed.is_empty() {
-        None
-      } else {
-        trimmed.parse::<f64>().ok()
-      }
-    })
-    .collect()
-}
-
 fn main() {
-  let alp_dir = PathBuf::from("/Users/z/git/db/ALP");
   let test_cases = [
     "basel_wind_f",
     "bird_migration_f",
@@ -34,8 +21,11 @@ fn main() {
   let mut encoder = Encoder::<f64>::with_capacity(1024);
 
   for name in test_cases {
-    let path = alp_dir.join(format!("data/samples/{name}.csv"));
-    let data = load_csv(&path);
+    let data = common::load_sample(name);
+    if data.is_empty() {
+      eprintln!("Warning: sample {name} not found");
+      continue;
+    }
     let raw_bytes = data.len() * 8;
 
     encoder.reset();
