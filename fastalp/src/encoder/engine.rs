@@ -30,6 +30,12 @@ const DELTA_EVAL_MIN_BW: u8 = 4;
 /// Minimum bit-width floor for low bit-width outlier pruning in FOR mode
 /// FOR 模式低位宽离群值剪枝位宽下限
 const LOW_BW_PRUNE_MIN: u8 = 4;
+/// Maximum acceptable number of exceptions pruned during pre-pruning (protects Delta mode)
+/// 前置离群点剪枝最大异常数上限（控制异常点数量，保护后续 Delta 差分评估不被过多离群点拖累）
+const MAX_PRE_PRUNE_EXCEPTIONS: usize = 16;
+/// Maximum acceptable number of exceptions pruned in FOR mode (when Delta was not selected)
+/// FOR 模式专用离群点剪枝最大异常数上限（确定不走 Delta 后放宽预算，充分收窄基准值位宽）
+const MAX_FOR_PRUNE_EXCEPTIONS: usize = 32;
 /// Stack work buffer capacity in elements
 /// 栈上预分配工作缓冲区大小（元素个数，避免小数组堆分配）
 const STACK_BUFFER_CAPACITY: usize = 1024;
@@ -215,7 +221,6 @@ pub(crate) fn compress_into_engine<F: AlpFloat>(
 
   let is_large = count > u16::MAX as usize;
   let mut for_bit_width = F::bits_needed(max_offset);
-  let mut did_pre_prune = false;
 
   // Pre-fill existing exceptions with base to prevent double counting in outlier histogram
   // 在离群值直方图统计前，将已有异常位置预先置为基准值 base，避免其极大差值被误判为新增离群点导致双重计数
@@ -225,10 +230,11 @@ pub(crate) fn compress_into_engine<F: AlpFloat>(
     }
   }
 
+  let had_cached_pruned = matches!(*cached_target_bw, CachedTargetBw::Pruned(_));
+
   // 5. Outlier pre-pruning: narrow bit-width and eliminate isolated spikes
-  // 5. 离群值预剪枝：若位宽较高先尝试剪枝收窄位宽并消除尖峰
+  // 5. 离群值预剪枝：若位宽较高先尝试剪枝收窄位宽并消除尖峰（受限预算 16，保护 Delta 模式）
   if for_bit_width >= HIGH_BW_PRUNE_THRESHOLD && exceptions.len() < MAX_EXCEPTIONS {
-    did_pre_prune = true;
     match *cached_target_bw {
       CachedTargetBw::Pruned(target_bw) if target_bw < for_bit_width => {
         apply_target_bw(slice, encoded_ints, base, target_bw, exceptions);
@@ -243,12 +249,11 @@ pub(crate) fn compress_into_engine<F: AlpFloat>(
           for_bit_width,
           exceptions,
           is_large,
+          MAX_PRE_PRUNE_EXCEPTIONS,
         );
         if pruned_bw < for_bit_width {
           *cached_target_bw = CachedTargetBw::Pruned(pruned_bw);
           for_bit_width = pruned_bw;
-        } else {
-          *cached_target_bw = CachedTargetBw::Disabled;
         }
       }
     }
@@ -325,13 +330,20 @@ pub(crate) fn compress_into_engine<F: AlpFloat>(
     *cached_use_delta = Some(use_delta);
   }
 
-  // 7. Low bit-width outlier pruning for FOR mode (when Delta was not selected)
-  // 7. FOR 模式低位宽离群值剪枝 (针对未进前置剪枝且未进 Delta 的情况，如 8/12 位剪枝)
-  if !did_pre_prune
-    && !use_delta
-    && for_bit_width > LOW_BW_PRUNE_MIN
-    && for_bit_width < HIGH_BW_PRUNE_THRESHOLD
-  {
+  // Restore base for existing exceptions in FOR mode:
+  // Purges delta patch_val artifacts to prevent double counting in outlier histogram & premature abort
+  // FOR 模式恢复基准值：消除 Delta 回填引入的 patch_val 污染，防止后续离群值直方图双重计数与错误短路
+  if !use_delta && !exceptions.is_empty() {
+    for exc in exceptions.iter() {
+      unsafe {
+        *encoded_ints.get_unchecked_mut(exc.pos) = base;
+      }
+    }
+  }
+
+  // 7. Outlier pruning for FOR mode (when Delta was not selected)
+  // 7. FOR 模式离群值剪枝 (针对未进 Delta 的情况，首块放宽预算至 MAX_FOR_PRUNE_EXCEPTIONS，后续块直接复用缓存)
+  if !use_delta && for_bit_width > LOW_BW_PRUNE_MIN {
     match *cached_target_bw {
       CachedTargetBw::Pruned(target_bw) if target_bw < for_bit_width => {
         apply_target_bw(slice, encoded_ints, base, target_bw, exceptions);
@@ -340,8 +352,9 @@ pub(crate) fn compress_into_engine<F: AlpFloat>(
         exc_len = exceptions_byte_size::<F>(exceptions.len(), is_large);
         total_needed = hdr_len + F::BASE_SIZE + for_packed_len + exc_len;
       }
-      CachedTargetBw::Disabled | CachedTargetBw::Pruned(_) => {}
-      CachedTargetBw::Uninit => {
+      CachedTargetBw::Disabled => {}
+      CachedTargetBw::Pruned(_) if had_cached_pruned => {}
+      _ => {
         let new_bw = try_prune_outliers::<F>(
           slice,
           encoded_ints,
@@ -349,16 +362,17 @@ pub(crate) fn compress_into_engine<F: AlpFloat>(
           for_bit_width,
           exceptions,
           is_large,
+          MAX_FOR_PRUNE_EXCEPTIONS,
         );
         if new_bw < for_bit_width {
           *cached_target_bw = CachedTargetBw::Pruned(new_bw);
           for_bit_width = new_bw;
           for_packed_len = packed_byte_size(count, for_bit_width);
           exc_len = exceptions_byte_size::<F>(exceptions.len(), is_large);
-        } else {
+          total_needed = hdr_len + F::BASE_SIZE + for_packed_len + exc_len;
+        } else if cached_target_bw.is_uninit() {
           *cached_target_bw = CachedTargetBw::Disabled;
         }
-        total_needed = hdr_len + F::BASE_SIZE + for_packed_len + exc_len;
       }
     }
   }
@@ -428,6 +442,7 @@ pub fn profile_compress_breakdown<F: AlpFloat>(slice: &[F]) {
       for_bit_width,
       &mut exc_copy,
       is_large,
+      MAX_FOR_PRUNE_EXCEPTIONS,
     );
   }
   let t_prune = start.elapsed().as_nanos() as f64 / iters as f64;
