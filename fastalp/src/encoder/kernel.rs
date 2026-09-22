@@ -102,9 +102,9 @@ macro_rules! define_fearless_kernel {
       let min_v = min_v0.min(min_v1);
       let max_v = max_v0.max(max_v1);
 
-      let mut min_arr = [0.0 as $F; 8];
-      let mut max_arr = [0.0 as $F; 8];
-      let mut diff_arr = [0 as $U; 8];
+      let mut min_arr = [0.0 as $F; 64];
+      let mut max_arr = [0.0 as $F; 64];
+      let mut diff_arr = [0 as $U; 64];
       min_v.store_slice(&mut min_arr[..n]);
       max_v.store_slice(&mut max_arr[..n]);
       any_diff_v.store_slice(&mut diff_arr[..n]);
@@ -113,22 +113,28 @@ macro_rules! define_fearless_kernel {
       let (mut min_int, mut max_int) = if full_chunks_len > 0 {
         let mut min_val = <$F>::INFINITY;
         let mut max_val = <$F>::NEG_INFINITY;
-        for i in 0..n {
-          min_val = min_val.min(min_arr[i]);
-          max_val = max_val.max(max_arr[i]);
-          any_diff |= diff_arr[i];
+        for ((&min_e, &max_e), &diff_e) in min_arr[..n]
+          .iter()
+          .zip(&max_arr[..n])
+          .zip(&diff_arr[..n])
+        {
+          min_val = min_val.min(min_e);
+          max_val = max_val.max(max_e);
+          any_diff |= diff_e;
         }
         (min_val as $I, max_val as $I)
       } else {
         (<$I>::MAX, <$I>::MIN)
       };
 
+      // SAFETY: Caller guarantees enc_ptr has valid writable memory for at least slice.len() elements.
+      let enc_slice = unsafe { core::slice::from_raw_parts_mut(enc_ptr, slice.len()) };
+
       if !rem_slice.is_empty() {
         let rem_start = full_chunks_len;
-        for (j, &v) in rem_slice.iter().enumerate() {
-          let idx = rem_start + j;
+        for (&v, enc_ref) in rem_slice.iter().zip(&mut enc_slice[rem_start..]) {
           let enc = (v * exp_factor).round_ties_even() as $I;
-          unsafe { *enc_ptr.add(idx) = enc };
+          *enc_ref = enc;
           let d = if use_div {
             (enc as $F) / exp_factor
           } else if fac_int == 1 {
@@ -154,14 +160,14 @@ macro_rules! define_fearless_kernel {
 
       macro_rules! run_rescan {
         ($decode:expr) => {
-          for (idx, &v) in slice.iter().enumerate() {
-            let enc = unsafe { *enc_ptr.add(idx) };
+          for (idx, (&v, enc_ref)) in slice.iter().zip(enc_slice.iter_mut()).enumerate() {
+            let enc = *enc_ref;
             let d = $decode(enc);
             if d.to_bits() == v.to_bits() {
               min_int_rescanned = min_int_rescanned.min(enc);
               max_int_rescanned = max_int_rescanned.max(enc);
             } else {
-              unsafe { *enc_ptr.add(idx) = 0 };
+              *enc_ref = 0;
               exceptions.push(Exception {
                 pos: idx,
                 bits: v.to_bits(),

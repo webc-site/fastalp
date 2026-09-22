@@ -139,7 +139,7 @@ unsafe fn capi_compress<F: AlpFloat>(
   dst: *mut u8,
   dst_cap: usize,
 ) -> usize {
-  if src.is_null() || dst.is_null() || len == 0 || !is_aligned_to(src) {
+  if src.is_null() || dst.is_null() || len == 0 || dst_cap == 0 || !is_aligned_to(src) {
     return 0;
   }
   let input = unsafe { from_raw_parts(src, len) };
@@ -168,7 +168,7 @@ unsafe fn capi_compress_cached<F: AlpFloat>(
   dst: *mut u8,
   dst_cap: usize,
 ) -> usize {
-  if src.is_null() || dst.is_null() || len == 0 || !is_aligned_to(src) {
+  if src.is_null() || dst.is_null() || len == 0 || dst_cap == 0 || !is_aligned_to(src) {
     return 0;
   }
   let input = unsafe { from_raw_parts(src, len) };
@@ -520,6 +520,7 @@ unsafe fn capi_encoder_compress<F: AlpFloat>(
     || src.is_null()
     || dst.is_null()
     || len == 0
+    || dst_cap == 0
     || !is_aligned_to(src)
   {
     return 0;
