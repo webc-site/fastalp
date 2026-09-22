@@ -4,12 +4,10 @@
 
 所有基准测试均在同一物理机上执行并进行同机对比测试：
 
-- **处理器**: Apple M2 Max (12 核心：8 性能核 @ 3.68 GHz + 4 能效核 @ 2.42 GHz, ARMv8.6-A NEON 指令集)<br>
-- **操作系统**: macOS Sequoia 26.5.1 (Darwin Kernel Version 25.5.0 arm64)<br>
-- **Rust 编译工具链**: `rustc 1.98.0 / nightly` (配置：`opt-level = 3`, `lto = "fat"`, `codegen-units = 1`)<br>
-- **C++ 编译工具链**: Homebrew LLVM Clang 22.1.8 (`-O3 -std=c++17 -DNDEBUG -march=native`) / CMake 4.4.2<br>
+- **芯片: Apple M2 Max (12 核)**<br>
+- **环境: macOS 26.5.1 ｜ 工具链: Rust 1.100.0-nightly / Clang (-O3)**<br>
 - **内存分配器**: `mimalloc 0.1.52`<br>
-- **基准测试框架**: Rust `divan 0.1.20` 微基准套件 vs C++ `std::chrono::high_resolution_clock`（稳态中位数采样）
+- **基准测试框架**: Rust `divan 0.1.21` 微基准套件 vs C++ `std::chrono::high_resolution_clock`（稳态中位数采样）
 
 ### 主流浮点与时序压缩算法同机横向对比
 

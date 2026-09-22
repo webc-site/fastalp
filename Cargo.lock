@@ -221,6 +221,8 @@ dependencies = [
  "lz4_flex",
  "mimalloc",
  "pco",
+ "serde",
+ "serde_json",
  "snap",
  "thiserror",
  "zstd",

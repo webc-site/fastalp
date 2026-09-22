@@ -4,7 +4,73 @@ use std::{
   time::{Duration, Instant},
 };
 
-use fastalp::{Encoder, compress_into, decompress_into};
+use fastalp::{ChunkType, Encoder, compress_into, decompress_into};
+use serde::Serialize;
+
+#[inline]
+fn round2(v: f64) -> f64 {
+  (v * 100.0).round() / 100.0
+}
+
+#[inline]
+fn round4(v: f64) -> f64 {
+  (v * 10000.0).round() / 10000.0
+}
+
+#[derive(Debug, Serialize)]
+struct DatasetItem {
+  name: String,
+  raw_bytes: usize,
+  compressed_bytes: usize,
+  ratio: f64,
+  bits_per_val: f64,
+  enc_gb_s: f64,
+  enc_sampled_gb_s: f64,
+  enc_kernel_gb_s: f64,
+  dec_gb_s: f64,
+}
+
+#[derive(Debug, Serialize)]
+struct Paper31Section {
+  total_raw_bytes: usize,
+  total_compressed_bytes: usize,
+  ratio: f64,
+  bits_per_val: f64,
+  avg_enc_gb_s: f64,
+  avg_enc_sampled_gb_s: f64,
+  avg_enc_kernel_gb_s: f64,
+  avg_dec_gb_s: f64,
+  datasets: Vec<DatasetItem>,
+}
+
+#[derive(Debug, Serialize)]
+struct MicroBenchmarkResult {
+  raw_bytes: usize,
+  compressed_bytes: usize,
+  ratio: f64,
+  bits_per_val: f64,
+  enc_gb_s: f64,
+  enc_sampled_gb_s: f64,
+  enc_kernel_gb_s: f64,
+  dec_gb_s: f64,
+}
+
+#[derive(Debug, Serialize)]
+struct MicroBenchmarksSection {
+  sensor_1024: MicroBenchmarkResult,
+  ramp_1024: MicroBenchmarkResult,
+  constant_1024: MicroBenchmarkResult,
+  random_1024: MicroBenchmarkResult,
+}
+
+#[derive(Debug, Serialize)]
+struct CodecJsonReport {
+  algorithm: &'static str,
+  display_name: &'static str,
+  category: &'static str,
+  paper_31: Paper31Section,
+  micro_benchmarks: MicroBenchmarksSection,
+}
 
 fn load_csv(path: &Path) -> Vec<f64> {
   let content = fs::read_to_string(path).expect("Failed to read CSV");
@@ -19,6 +85,67 @@ fn load_csv(path: &Path) -> Vec<f64> {
       }
     })
     .collect()
+}
+
+fn bench_micro(data: &[f64]) -> MicroBenchmarkResult {
+  let iters = 1000;
+  let mut comp_buf = Vec::with_capacity(data.len() * 2 + 64);
+  let mut dec_buf: Vec<f64> = Vec::with_capacity(data.len());
+  let mut encoder = Encoder::new();
+
+  // Warmup
+  for _ in 0..50 {
+    comp_buf.clear();
+    encoder.compress_into(data, &mut comp_buf);
+    dec_buf.clear();
+    decompress_into(&comp_buf, &mut dec_buf).unwrap();
+  }
+
+  // Sampled
+  let t0 = Instant::now();
+  for _ in 0..iters {
+    comp_buf.clear();
+    compress_into(data, &mut comp_buf);
+  }
+  let enc_sampled_dt = t0.elapsed().as_secs_f64() / iters as f64;
+
+  // Cached kernel
+  encoder.reset();
+  comp_buf.clear();
+  encoder.compress_into(data, &mut comp_buf);
+  let t1 = Instant::now();
+  for _ in 0..iters {
+    comp_buf.clear();
+    encoder.compress_into(data, &mut comp_buf);
+  }
+  let enc_kernel_dt = t1.elapsed().as_secs_f64() / iters as f64;
+
+  // Decompress
+  let t2 = Instant::now();
+  for _ in 0..iters {
+    dec_buf.clear();
+    decompress_into(&comp_buf, &mut dec_buf).unwrap();
+  }
+  let dec_dt = t2.elapsed().as_secs_f64() / iters as f64;
+
+  let raw_bytes = data.len() * 8;
+  let comp_bytes = comp_buf.len();
+  let ratio = raw_bytes as f64 / comp_bytes as f64;
+  let bpv = (comp_bytes * 8) as f64 / data.len() as f64;
+  let enc_sampled_gb_s = (raw_bytes as f64 / enc_sampled_dt) / 1e9;
+  let enc_kernel_gb_s = (raw_bytes as f64 / enc_kernel_dt) / 1e9;
+  let dec_gb_s = (raw_bytes as f64 / dec_dt) / 1e9;
+
+  MicroBenchmarkResult {
+    raw_bytes,
+    compressed_bytes: comp_bytes,
+    ratio: round4(ratio),
+    bits_per_val: round2(bpv),
+    enc_gb_s: round2(enc_sampled_gb_s),
+    enc_sampled_gb_s: round2(enc_sampled_gb_s),
+    enc_kernel_gb_s: round2(enc_kernel_gb_s),
+    dec_gb_s: round2(dec_gb_s),
+  }
 }
 
 fn main() {
@@ -38,7 +165,7 @@ fn main() {
     entries.len()
   );
 
-  let mut datasets_json = Vec::new();
+  let mut dataset_items = Vec::new();
   let mut total_raw_bytes = 0;
   let mut total_comp_bytes = 0;
   let mut sum_enc = 0.0;
@@ -121,26 +248,24 @@ fn main() {
     sum_dec += dec_gb_s;
 
     let header = fastalp::read_header(&comp_buf).unwrap();
-    let chunk_type = header.chunk_type().unwrap_or(fastalp::ChunkType::F64);
+    let chunk_type = header.chunk_type().unwrap_or(ChunkType::F64);
     let bw = header.params.map(|p| p.bit_width).unwrap_or(0);
     println!(
       "{:<24} | {:<12?} (bw={:>2}, rep={}) | Ratio: {:>6.2}x | Enc(samp): {:>5.2} GB/s | Enc(kern): {:>5.2} GB/s | Dec: {:>5.2} GB/s",
       name, chunk_type, bw, header.has_repeat, ratio, enc_gb_s, enc_kernel_gb_s, dec_gb_s
     );
 
-    datasets_json.push(format!(
-      r#"      {{
-        "name": "{name}",
-        "raw_bytes": {raw_bytes},
-        "compressed_bytes": {comp_bytes},
-        "ratio": {ratio:.4},
-        "bits_per_val": {bits_per_val:.2},
-        "enc_gb_s": {enc_gb_s:.2},
-        "enc_sampled_gb_s": {enc_gb_s:.2},
-        "enc_kernel_gb_s": {enc_kernel_gb_s:.2},
-        "dec_gb_s": {dec_gb_s:.2}
-      }}"#
-    ));
+    dataset_items.push(DatasetItem {
+      name,
+      raw_bytes,
+      compressed_bytes: comp_bytes,
+      ratio: round4(ratio),
+      bits_per_val: round2(bits_per_val),
+      enc_gb_s: round2(enc_gb_s),
+      enc_sampled_gb_s: round2(enc_gb_s),
+      enc_kernel_gb_s: round2(enc_kernel_gb_s),
+      dec_gb_s: round2(dec_gb_s),
+    });
   }
 
   let n = entries.len() as f64;
@@ -150,30 +275,46 @@ fn main() {
   let total_ratio = total_raw_bytes as f64 / total_comp_bytes as f64;
   let total_bpv = (total_comp_bytes * 8) as f64 / (total_raw_bytes as f64 / 8.0);
 
-  let full_json = format!(
-    r#"{{
-  "algorithm": "fastalp",
-  "display_name": "fastalp (Rust)",
-  "category": "specialized_float",
-  "paper_31": {{
-    "total_raw_bytes": {total_raw_bytes},
-    "total_compressed_bytes": {total_comp_bytes},
-    "ratio": {total_ratio:.4},
-    "bits_per_val": {total_bpv:.2},
-    "avg_enc_gb_s": {avg_enc:.2},
-    "avg_enc_sampled_gb_s": {avg_enc:.2},
-    "avg_enc_kernel_gb_s": {avg_enc_kern:.2},
-    "avg_dec_gb_s": {avg_dec:.2},
-    "datasets": [
-{}
-    ]
-  }}
-}}
-"#,
-    datasets_json.join(",\n")
-  );
+  // Measure microbenchmarks
+  let micro_len = 1024;
+  let sensor_data: Vec<f64> = (0..micro_len)
+    .map(|i| (200 + (i % 150)) as f64 * 0.1)
+    .collect();
+  let ramp_data: Vec<f64> = (0..micro_len).map(|i| 100.0 + i as f64 * 0.05).collect();
+  let constant_data: Vec<f64> = vec![98.6; micro_len];
+  let random_noise: Vec<f64> = {
+    fastrand::seed(42);
+    (0..micro_len)
+      .map(|_| f64::from_bits(fastrand::u64(..)))
+      .collect()
+  };
+
+  let report = CodecJsonReport {
+    algorithm: "fastalp",
+    display_name: "fastalp (Rust)",
+    category: "specialized_float",
+    paper_31: Paper31Section {
+      total_raw_bytes,
+      total_compressed_bytes: total_comp_bytes,
+      ratio: round4(total_ratio),
+      bits_per_val: round2(total_bpv),
+      avg_enc_gb_s: round2(avg_enc),
+      avg_enc_sampled_gb_s: round2(avg_enc),
+      avg_enc_kernel_gb_s: round2(avg_enc_kern),
+      avg_dec_gb_s: round2(avg_dec),
+      datasets: dataset_items,
+    },
+    micro_benchmarks: MicroBenchmarksSection {
+      sensor_1024: bench_micro(&sensor_data),
+      ramp_1024: bench_micro(&ramp_data),
+      constant_1024: bench_micro(&constant_data),
+      random_1024: bench_micro(&random_noise),
+    },
+  };
 
   let json_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/json/fastalp.json");
+  let full_json =
+    serde_json::to_string_pretty(&report).expect("Failed to serialize fastalp report to JSON");
   fs::write(&json_path, full_json).expect("Failed to write fastalp.json");
   println!("\nSuccessfully updated {}", json_path.display());
 }
