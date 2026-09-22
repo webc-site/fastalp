@@ -4,20 +4,20 @@ import { $ } from "bun";
 import { loadBenchData } from "./lib/data.js";
 import { renderMd } from "./lib/renderMd.js";
 
-const BENCHES_DIR = import.meta.dirname;
-const ROOT_DIR = resolve(BENCHES_DIR, "..");
-const LANG_LI = ["zh", "en"];
+const BENCHES_DIR = import.meta.dirname,
+  ROOT_DIR = resolve(BENCHES_DIR, ".."),
+  LANG_LI = ["zh", "en"];
 
 export const benchMdGen = async () => {
   console.log("1. Loading benchmark JSONs...");
-  const benchData = await loadBenchData();
+  const bench_data = await loadBenchData();
 
   for (const lang of LANG_LI) {
     console.log(`2. Generating readme/${lang}/bench.md from JSON...`);
-    const md = renderMd(benchData, lang);
-    const targetFile = resolve(ROOT_DIR, `readme/${lang}/bench.md`);
-    await Bun.write(targetFile, md);
-    console.log(`  -> Saved ${targetFile}`);
+    const md = renderMd(bench_data, lang),
+      target_file = resolve(ROOT_DIR, `readme/${lang}/bench.md`);
+    await Bun.write(target_file, md);
+    console.log(`  -> Saved ${target_file}`);
   }
 
   console.log("3. Compiling fastalp/README.md with mdt...");

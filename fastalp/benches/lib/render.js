@@ -1,22 +1,23 @@
-import { getSystemEnv, computeScenarioMetrics } from "./data.js";
+import { systemEnvByLang, computeScenarioMetrics, algoDictByLi } from "./data.js";
 
 const xmlEscape = (str) => {
   if (typeof str !== "string") return str ?? "";
   return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 };
 
-export const renderSvg = (benchData, rawI18n, lang = "zh") => {
-  const { algorithms } = benchData;
-  const isZh = lang === "zh";
-  const sysEnv = getSystemEnv(isZh);
+export const renderSvg = (bench_data, raw_i18n, lang = "zh") => {
+  const { algorithms } = bench_data,
+    is_zh = lang === "zh",
+    isZh = is_zh,
+    sys_env = systemEnvByLang(is_zh);
 
   const i18n = Object.fromEntries(
-    Object.entries(rawI18n).map(([k, v]) => [k, typeof v === "string" ? xmlEscape(v) : v])
+    Object.entries(raw_i18n).map(([k, v]) => [k, typeof v === "string" ? xmlEscape(v) : v])
   );
 
   // Mobile-first layout: 720px width, tall vertical infographic
@@ -56,14 +57,15 @@ export const renderSvg = (benchData, rawI18n, lang = "zh") => {
   const sec2Bottom = sec2CardsY + 6 * scH + 5 * cardGap;
 
   const footerLines = (i18n.footer_lines || [i18n.footer_left]).map((line) =>
-    line.replace("{cpu}", sysEnv.cpuModel || "Apple Silicon")
+    line.replace("{cpu}", sys_env.cpuModel || "Apple Silicon")
   );
   const footerLineH = 22;
   const footerY = sec2Bottom + 30;
   const totalH = footerY + (footerLines.length - 1) * footerLineH + 38;
 
-  const fastalgo = algorithms.find((a) => a.algorithm === "fastalp") || algorithms[0];
-  const cppAlgo = algorithms.find((a) => a.algorithm === "cpp_alp") || algorithms[1];
+  const algo_dict = bench_data.dict ?? algoDictByLi(algorithms),
+    fastalgo = algo_dict.fastalp || algorithms[0],
+    cppAlgo = algo_dict.cpp_alp || algorithms[1];
 
   const faKern = fastalgo.paper_31.geomean_enc_kernel_gb_s;
   const cppKern = cppAlgo.paper_31.geomean_enc_kernel_gb_s;
@@ -338,8 +340,8 @@ export const renderSvg = (benchData, rawI18n, lang = "zh") => {
   <!-- Environment Card (Unified 20px top margin, 26px bottom margin, centered text) -->
   <g transform="translate(${margin}, ${envCardY})">
     <rect width="${contentW}" height="${headerBoxH}" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
-    <text x="16" y="28" font-size="13" font-weight="bold" fill="#0f172a">${i18n.env_badge_title} · ${xmlEscape(sysEnv.cpu)}</text>
-    <text x="16" y="51" font-size="12" fill="#475569">${xmlEscape(sysEnv.toolchain)}</text>
+    <text x="16" y="28" font-size="13" font-weight="bold" fill="#0f172a">${i18n.env_badge_title} · ${xmlEscape(sys_env.cpu)}</text>
+    <text x="16" y="51" font-size="12" fill="#475569">${xmlEscape(sys_env.toolchain)}</text>
   </g>
 
   <!-- Section 1: Main Table Container (8 Codecs Overview, No Legend) -->

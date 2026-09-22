@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S bun
 import fs from "node:fs";
 
 const input_file = process.argv[2] || "bench_raw.txt",
@@ -12,7 +12,7 @@ if (!fs.existsSync(input_file)) {
 
 const raw_text = fs.readFileSync(input_file, "utf8").replaceAll(/\x1b\[[0-9;]*m/g, "");
 
-const unit_map = {
+const UNIT_MAP = {
   ns: 1,
   "µs": 1e3,
   us: 1e3,
@@ -20,7 +20,7 @@ const unit_map = {
   s: 1e9,
 };
 
-const byteCount = (name) => {
+const byteByBenchName = (name) => {
   const is_f32 = name.includes("f32"),
     elem_bytes = is_f32 ? 4 : 8;
   if (name.includes("large_batch")) {
@@ -43,8 +43,8 @@ for (const line of line_li) {
     fastest_unit = m[3],
     median_val = parseFloat(m[6]),
     median_unit = m[7],
-    median_ns = median_val * (unit_map[median_unit] || 1),
-    bytes = byteCount(name),
+    median_ns = median_val * (UNIT_MAP[median_unit] || 1),
+    bytes = byteByBenchName(name),
     throughput_gb = (bytes / median_ns).toFixed(2);
 
   item_li.push({
@@ -57,15 +57,15 @@ for (const line of line_li) {
 }
 
 // 1. Write github-action-benchmark custom format JSON
-const bench_data = item_li.map((item) => ({
+const bench_data_li = item_li.map((item) => ({
   name: item.name,
   unit: "ns",
   value: item.median_ns,
   extra: `${item.throughput_gb} GB/s`,
 }));
 
-fs.writeFileSync(output_json_file, JSON.stringify(bench_data, null, 2), "utf8");
-console.log(`Generated benchmark JSON for ${bench_data.length} items -> ${output_json_file}`);
+fs.writeFileSync(output_json_file, JSON.stringify(bench_data_li, null, 2), "utf8");
+console.log(`Generated benchmark JSON for ${bench_data_li.length} items -> ${output_json_file}`);
 
 // 2. Generate Markdown summary
 let max_dec_throughput = 0,
@@ -79,7 +79,7 @@ for (const item of item_li) {
   }
 }
 
-const formatMode = (name) => {
+const modeByBenchName = (name) => {
   if (name.includes("decompress") || name.includes("_dec")) return "Decompress";
   if (name.includes("cached")) return "Warm Kernel";
   if (name.includes("sampled")) return "Cold Sampled";
@@ -93,7 +93,7 @@ md += "| Benchmark Case | Median Latency | Throughput (GB/s) | Mode |\n";
 md += "| :--- | :---: | :---: | :---: |\n";
 
 for (const item of item_li) {
-  md += `| \`${item.name}\` | ${item.median} | **${item.throughput_gb} GB/s** | ${formatMode(item.name)} |\n`;
+  md += `| \`${item.name}\` | ${item.median} | **${item.throughput_gb} GB/s** | ${modeByBenchName(item.name)} |\n`;
 }
 
 md += "\n> **[View Interactive Continuous Benchmark History & Regression Chart](https://webc-site.github.io/fastalp/dev/bench/)**\n";
