@@ -23,7 +23,7 @@
 //! Coverage: All 37 standard time-series datasets and microbenchmark scenarios.
 //! 评测指标覆盖全部 37 个公开时序数据集及多种微基准测试场景。
 
-#[path = "common/mod.rs"]
+#[path = "common/samples.rs"]
 mod common;
 
 use std::{
@@ -632,12 +632,8 @@ fn main() {
 
   // Resolve JSON output directory.
   // 解析 JSON 报告输出目录。
-  let json_dir = if Path::new("fastalp/benches/json").exists() {
-    Path::new("fastalp/benches/json")
-  } else {
-    Path::new("benches/json")
-  };
-  let _ = create_dir_all(json_dir);
+  let json_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("benches/json");
+  let _ = create_dir_all(&json_dir);
 
   // Benchmark each codec across all datasets and scenarios.
   // 逐一评测各算法在全量数据集与微基准场景下的表现。
