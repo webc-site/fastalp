@@ -33,7 +33,7 @@ use core::{
   marker::PhantomData,
   mem::{MaybeUninit, size_of},
   ptr::copy_nonoverlapping,
-  slice::from_raw_parts_mut,
+  slice::{from_raw_parts, from_raw_parts_mut},
 };
 
 use delta::decode_delta_raw;
@@ -42,7 +42,7 @@ use standard::decode_standard_raw;
 use crate::{
   bitpack::{
     AlpDictDecoder, AlpRdConstantDecoder, bitunpack_core_generic, bitunpack_u64_raw,
-    bitunpack_u64_slice, packed_byte_size,
+    packed_byte_size,
   },
   constants::{EXC_COUNT_LEN, EXC_COUNT_LEN_U32, MAX_DICT_ENTRIES},
   error::{Error, Result},
@@ -359,30 +359,38 @@ unsafe fn decode_rd_raw<F: AlpFloat>(payload: &[u8], count: usize, dst_ptr: *mut
     let mut block_offset = 0;
     let mut cur_left_cursor = cursor;
     let mut cur_right_cursor = right_cursor;
-    let mut left_buf = [0u64; 1024];
-    let mut right_buf = [0u64; 1024];
+    let mut left_buf = MaybeUninit::<[u64; 1024]>::uninit();
+    let mut right_buf = MaybeUninit::<[u64; 1024]>::uninit();
+    let left_ptr = left_buf.as_mut_ptr().cast::<u64>();
+    let right_ptr = right_buf.as_mut_ptr().cast::<u64>();
+
     while block_offset < count {
       let cur_count = (count - block_offset).min(1024);
       let cur_left_bytes = packed_byte_size(cur_count, left_bw);
       let cur_right_bytes = packed_byte_size(cur_count, right_bw);
 
-      bitunpack_u64_slice(
-        &payload[cur_left_cursor..cur_left_cursor + cur_left_bytes],
-        cur_count,
-        left_bw,
-        &mut left_buf[..cur_count],
-      )?;
+      unsafe {
+        bitunpack_u64_raw(
+          &payload[cur_left_cursor..cur_left_cursor + cur_left_bytes],
+          cur_count,
+          left_bw,
+          left_ptr,
+        )?;
+      }
       cur_left_cursor += cur_left_bytes;
+
+      let left_slice = unsafe { from_raw_parts(left_ptr, cur_count) };
 
       if size_of::<F>() == 8 {
         let dst_u64_ptr = unsafe { dst_ptr.add(block_offset).cast::<u64>() };
         if right_bw == 0 {
           let dst_u64 = unsafe { from_raw_parts_mut(dst_u64_ptr, cur_count) };
-          let (dst_chunks, dst_rem) = dst_u64.as_chunks_mut::<8>();
-          let (left_chunks, left_rem) = left_buf[..cur_count].as_chunks::<8>();
+          let (dst_chunks, dst_rem) = dst_u64.as_chunks_mut::<16>();
+          let (left_chunks, left_rem) = left_slice.as_chunks::<16>();
           for (dc, lc) in dst_chunks.iter_mut().zip(left_chunks.iter()) {
             unroll_8!(k => {
               dc[k] = shifted_dict[lc[k] as usize & 7];
+              dc[k + 8] = shifted_dict[lc[k + 8] as usize & 7];
             });
           }
           for (d, l) in dst_rem.iter_mut().zip(left_rem.iter()) {
@@ -400,11 +408,12 @@ unsafe fn decode_rd_raw<F: AlpFloat>(payload: &[u8], count: usize, dst_ptr: *mut
           cur_right_cursor += cur_right_bytes;
 
           let dst_u64 = unsafe { from_raw_parts_mut(dst_u64_ptr, cur_count) };
-          let (dst_chunks, dst_rem) = dst_u64.as_chunks_mut::<8>();
-          let (left_chunks, left_rem) = left_buf[..cur_count].as_chunks::<8>();
+          let (dst_chunks, dst_rem) = dst_u64.as_chunks_mut::<16>();
+          let (left_chunks, left_rem) = left_slice.as_chunks::<16>();
           for (dc, lc) in dst_chunks.iter_mut().zip(left_chunks.iter()) {
             unroll_8!(k => {
               dc[k] |= shifted_dict[lc[k] as usize & 7];
+              dc[k + 8] |= shifted_dict[lc[k + 8] as usize & 7];
             });
           }
           for (d, l) in dst_rem.iter_mut().zip(left_rem.iter()) {
@@ -412,18 +421,21 @@ unsafe fn decode_rd_raw<F: AlpFloat>(payload: &[u8], count: usize, dst_ptr: *mut
           }
         }
       } else {
-        bitunpack_u64_slice(
-          &payload[cur_right_cursor..cur_right_cursor + cur_right_bytes],
-          cur_count,
-          right_bw,
-          &mut right_buf[..cur_count],
-        )?;
+        unsafe {
+          bitunpack_u64_raw(
+            &payload[cur_right_cursor..cur_right_cursor + cur_right_bytes],
+            cur_count,
+            right_bw,
+            right_ptr,
+          )?;
+        }
         cur_right_cursor += cur_right_bytes;
 
+        let right_slice = unsafe { from_raw_parts(right_ptr, cur_count) };
         unsafe {
           for i in 0..cur_count {
             *dst_ptr.add(block_offset + i) =
-              F::from_u64_raw(shifted_dict[left_buf[i] as usize & 7] | right_buf[i]);
+              F::from_u64_raw(shifted_dict[left_slice[i] as usize & 7] | right_slice[i]);
           }
         }
       }
