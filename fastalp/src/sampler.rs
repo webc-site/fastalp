@@ -170,10 +170,11 @@ pub(crate) fn find_best_params<F: AlpFloat>(samples: &[F]) -> BestParams {
       }
     }
 
-    // When fac == 0, evaluate Decimal Division Mode: triggered if mul infeasible, has exceptions, or high exponent
-    // 当 fac == 0 时，评估十进制除法重构模式 (Decimal Division Mode)
-    // 触发条件：乘法不可行、乘法存在异常、或高指数高精度场景 (exp >= HIGH_EXP_DIV_THRESHOLD)
-    if exp > 0 && (!mul_feasible || exceptions > 0 || exp >= HIGH_EXP_DIV_THRESHOLD) {
+    // When fac == 0, evaluate Decimal Division Mode: triggered when multiplication has exceptions or at high exponents
+    // 评估十进制除法重构模式：当乘法存在舍入异常或高指数区时触发，结合前置早停淘汰无效分支
+    let div_eligible = exp > 0 && (exceptions > 0 || exp >= HIGH_EXP_DIV_THRESHOLD);
+
+    if div_eligible {
       let mut div_exceptions = 0usize;
       let mut div_min = F::MAX_INT;
       let mut div_max = F::MIN_INT;
@@ -184,6 +185,10 @@ pub(crate) fn find_best_params<F: AlpFloat>(samples: &[F]) -> BestParams {
           div_max = div_max.max(enc);
         } else {
           div_exceptions += 1;
+          if div_exceptions >= 2 && idx < 4 {
+            div_exceptions = sample_len;
+            break;
+          }
           if div_exceptions >= DIV_EARLY_ABORT_EXC && idx < DIV_EARLY_CHECK_LEN {
             div_exceptions = sample_len;
             break;
