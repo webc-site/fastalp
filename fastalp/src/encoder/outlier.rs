@@ -51,7 +51,7 @@ pub(crate) fn try_prune_outliers<F: AlpFloat>(
   let current_cost = current_packed_len + exceptions_byte_size::<F>(exceptions.len(), is_large);
 
   // 仅当通过单调性筛选后（证明离群点确在容限内），才执行直方图与全局最优候选位宽评估
-  let mut hist = [0u16; 65];
+  let mut hist = [0u32; 65];
   for &val in encoded_ints.iter() {
     let diff = F::int_diff_to_u64(val, base);
     let bw = F::bits_needed(diff) as usize;

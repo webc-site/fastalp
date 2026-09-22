@@ -54,6 +54,9 @@ fn scan_deltas<F: AlpFloat>(
 /// 计算相邻一阶差分的极小值与所需比特位宽（8路展开二叉平衡规约流水线计算）
 #[inline(always)]
 pub(crate) fn delta_range<F: AlpFloat>(first: F::Int, rest: &[F::Int]) -> (F::Int, u8) {
+  if rest.is_empty() {
+    return (F::ZERO_INT, 0);
+  }
   let mut min_delta = F::MAX_INT;
   let mut max_delta = F::MIN_INT;
   let mut prev = first;
