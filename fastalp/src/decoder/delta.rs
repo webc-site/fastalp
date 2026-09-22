@@ -1,5 +1,8 @@
 use crate::{
-  bitpack::{AlpDecoder, AlpDeltaConsumer, bitunpack_core_consumer, packed_byte_size},
+  bitpack::{
+    AlpDecoder, AlpDeltaConsumer, AlpDeltaZeroMinConsumer, bitunpack_core_consumer,
+    packed_byte_size,
+  },
   error::{Error, Result},
   float::AlpFloat,
   params::AlpParams,
@@ -70,14 +73,61 @@ unsafe fn decode_delta_inner<F: AlpFloat, D: AlpDecoder<F>>(
   min_delta: F::Int,
   dst_ptr: *mut F,
 ) -> Result<()> {
+  let first_val = decoder.decode_int(first);
   unsafe {
-    *dst_ptr = decoder.decode_int(first);
+    *dst_ptr = first_val;
   }
   if count == 1 {
     return Ok(());
   }
 
   let rest_count = count - 1;
+
+  // 借鉴 graupel 思想：0 位宽零存储等差/恒定极速短路（吞吐直达总线极限 80+ GB/s）
+  if params.bit_width == 0 {
+    if min_delta == F::ZERO_INT {
+      // SAFETY: 调用方保证 dst_ptr 具有至少 count 个槽位；采用 MaybeUninit 严守 Rust 内存安全模型
+      unsafe {
+        core::slice::from_raw_parts_mut(
+          dst_ptr.add(1).cast::<core::mem::MaybeUninit<F>>(),
+          rest_count,
+        )
+        .fill(core::mem::MaybeUninit::new(first_val));
+      }
+    } else {
+      let m1 = min_delta;
+      let m2 = F::int_add(m1, m1);
+      let m3 = F::int_add(m2, m1);
+      let m4 = F::int_add(m2, m2);
+      let full_8 = rest_count / 8;
+      let mut base_curr = first;
+      for g in 0..full_8 {
+        let ptr = unsafe { dst_ptr.add(1 + g * 8) };
+        let c0 = F::int_add(base_curr, m1);
+        let c1 = F::int_add(base_curr, m2);
+        let c2 = F::int_add(base_curr, m3);
+        let c3 = F::int_add(base_curr, m4);
+        let c4 = F::int_add(c3, m1);
+        let c5 = F::int_add(c3, m2);
+        let c6 = F::int_add(c3, m3);
+        let c7 = F::int_add(c3, m4);
+        base_curr = c7;
+        let c = [c0, c1, c2, c3, c4, c5, c6, c7];
+        unsafe {
+          write_8!(ptr, k => decoder.decode_int(c[k]));
+        }
+      }
+      let mut curr = base_curr;
+      for i in (1 + full_8 * 8)..count {
+        curr = F::int_add(curr, m1);
+        unsafe {
+          *dst_ptr.add(i) = decoder.decode_int(curr);
+        }
+      }
+    }
+    return Ok(());
+  }
+
   let packed_len = packed_byte_size(rest_count, params.bit_width);
   if payload.len() < packed_len {
     return Err(Error::UnexpectedEof {
@@ -87,16 +137,27 @@ unsafe fn decode_delta_inner<F: AlpFloat, D: AlpDecoder<F>>(
   }
 
   // SAFETY: dst_ptr has count slots guaranteed by caller; unpack and reconstruct in a single fused pass
-  // SAFETY: 调用方保证 dst_ptr 具备 count 空间；在单趟流水线中完成位解包与前缀和浮点重构
+  // 根据 min_delta 是否为 0 分发到零公差极速特化单态化消费者
   unsafe {
-    let consumer = AlpDeltaConsumer::new(first, min_delta, decoder);
-    bitunpack_core_consumer(
-      &payload[..packed_len],
-      rest_count,
-      params.bit_width,
-      consumer,
-      dst_ptr.add(1),
-    );
+    if min_delta == F::ZERO_INT {
+      let consumer = AlpDeltaZeroMinConsumer::new(first, decoder);
+      bitunpack_core_consumer(
+        &payload[..packed_len],
+        rest_count,
+        params.bit_width,
+        consumer,
+        dst_ptr.add(1),
+      );
+    } else {
+      let consumer = AlpDeltaConsumer::new(first, min_delta, decoder);
+      bitunpack_core_consumer(
+        &payload[..packed_len],
+        rest_count,
+        params.bit_width,
+        consumer,
+        dst_ptr.add(1),
+      );
+    }
   }
   Ok(())
 }

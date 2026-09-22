@@ -48,6 +48,7 @@ pub trait AlpFloat: Copy + Default + PartialEq + PartialOrd + Send + Sync + 'sta
 
   fn int_diff_to_u64(val: Self::Int, base: Self::Int) -> u64;
   fn u64_to_int_add(offset: u64, base: Self::Int) -> Self::Int;
+  fn u64_to_int(offset: u64) -> Self::Int;
   fn calc_range(min_val: Self::Int, max_val: Self::Int) -> u64;
 
   fn int_sub(a: Self::Int, b: Self::Int) -> Self::Int;

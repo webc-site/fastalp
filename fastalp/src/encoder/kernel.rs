@@ -164,14 +164,22 @@ macro_rules! define_fearless_kernel {
 
       macro_rules! run_rescan {
         ($decode:expr) => {
+          let mut last_valid: Option<$I> = None;
+          let mut leading_exceptions = 0usize;
           for (idx, (&v, enc_ref)) in slice.iter().zip(enc_slice.iter_mut()).enumerate() {
             let enc = *enc_ref;
             let d = $decode(enc);
             if d.to_bits() == v.to_bits() {
               min_int_rescanned = min_int_rescanned.min(enc);
               max_int_rescanned = max_int_rescanned.max(enc);
+              if last_valid.is_none() {
+                last_valid = Some(enc);
+              }
             } else {
-              *enc_ref = 0;
+              *enc_ref = last_valid.unwrap_or(0);
+              if last_valid.is_none() {
+                leading_exceptions += 1;
+              }
               exceptions.push(Exception {
                 pos: idx,
                 bits: v.to_bits(),
@@ -180,6 +188,9 @@ macro_rules! define_fearless_kernel {
                 return (<$I>::MAX, <$I>::MIN);
               }
             }
+          }
+          if let Some(first_val) = last_valid {
+            enc_slice[..leading_exceptions].fill(first_val);
           }
         };
       }

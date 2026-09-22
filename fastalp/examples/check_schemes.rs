@@ -22,6 +22,12 @@ fn main() {
     enc.reset();
     dst.clear();
     enc.compress_into(&data, &mut dst);
-    println!("{name}: scheme={:?}", enc.cached_scheme);
+    let hdr = fastalp::read_header(&dst).unwrap();
+    println!(
+      "{name}: scheme={:?}, type_byte={}, len={}",
+      enc.cached_scheme,
+      hdr.type_byte,
+      dst.len()
+    );
   }
 }

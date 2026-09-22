@@ -64,6 +64,20 @@ unsafe fn decode_standard_inner<F: AlpFloat, D: AlpDecoder<F>>(
   decoder: D,
   dst_ptr: *mut F,
 ) -> Result<()> {
+  // 借鉴 graupel 思想：0 位宽零存储常量块极速短路（SIMD 向量广播填充，MaybeUninit 严格规避未初始化 UB）
+  if params.bit_width == 0 {
+    let val = decoder.decode_offset(0);
+    // SAFETY: 调用方保证 dst_ptr 具有至少 count 个连续有效可写槽位；采用 MaybeUninit 严守 Rust 内存安全模型
+    unsafe {
+      core::slice::from_raw_parts_mut(
+        dst_ptr.cast::<core::mem::MaybeUninit<F>>(),
+        count,
+      )
+      .fill(core::mem::MaybeUninit::new(val));
+    }
+    return Ok(());
+  }
+
   let packed_len = packed_byte_size(count, params.bit_width);
   if payload.len() < packed_len {
     return Err(Error::UnexpectedEof {
@@ -73,7 +87,7 @@ unsafe fn decode_standard_inner<F: AlpFloat, D: AlpDecoder<F>>(
   }
 
   // SAFETY: Caller guarantees sufficient buffer and valid pointers.
-  // bitunpack_core_generic 自动无缝处理 bit_width == 0 与 1..=64 位宽的寄存器级融合解码
+  // bitunpack_core_generic 自动无缝处理 1..=64 位宽的寄存器级融合解码
   unsafe {
     bitunpack_core_generic(
       &payload[..packed_len],

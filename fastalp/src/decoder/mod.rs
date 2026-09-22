@@ -70,12 +70,32 @@ fn count_bitmap_ones(bitmap: &[u8], count: usize) -> usize {
   ones
 }
 
+const fn build_repeat_offsets_lut() -> [[u8; 8]; 256] {
+  let mut lut = [[0u8; 8]; 256];
+  let mut b = 0usize;
+  while b < 256 {
+    let byte = b as u8;
+    let mut zeros = 0u8;
+    let mut k = 0usize;
+    while k < 8 {
+      if ((byte >> k) & 1) == 0 {
+        zeros += 1;
+      }
+      lut[b][k] = zeros;
+      k += 1;
+    }
+    b += 1;
+  }
+  lut
+}
+
+const REPEAT_OFFSETS_LUT: [[u8; 8]; 256] = build_repeat_offsets_lut();
+
 #[inline(always)]
 unsafe fn expand_byte<F: AlpFloat>(
   byte: u8,
   out_pos: usize,
   src_idx: &mut usize,
-  prev: &mut F,
   non_repeats: *const F,
   dst_ptr: *mut F,
 ) {
@@ -83,22 +103,23 @@ unsafe fn expand_byte<F: AlpFloat>(
     if byte == 0x00 {
       copy_nonoverlapping(non_repeats.add(*src_idx + 1), dst_ptr.add(out_pos), 8);
       *src_idx += 8;
-      *prev = *dst_ptr.add(out_pos + 7);
     } else if byte == 0xFF {
-      let p = *prev;
+      let p = *non_repeats.add(*src_idx);
       write_8!(dst_ptr.add(out_pos), _k => p);
     } else {
+      let offs = &REPEAT_OFFSETS_LUT[byte as usize];
+      let base_src = non_repeats.add(*src_idx);
+      let out = dst_ptr.add(out_pos);
       unroll_8!(k => {
-        *src_idx += ((byte >> k) & 1 ^ 1) as usize;
-        *dst_ptr.add(out_pos + k) = *non_repeats.add(*src_idx);
+        *out.add(k) = *base_src.add(offs[k] as usize);
       });
-      *prev = *dst_ptr.add(out_pos + 7);
+      *src_idx += offs[7] as usize;
     }
   }
 }
 
 /// Expands repeat run-length bitmap into output buffer.
-/// 将时序重复游程位图展开还原至输出缓冲区
+/// 将时序重复游程位图展开还原至输出缓冲区（无依赖并行查表与并发加载）
 ///
 /// # Safety
 ///
@@ -118,8 +139,7 @@ pub(crate) unsafe fn expand_repeats<F: AlpFloat>(
   // SAFETY: 调用方保证 non_repeats 包含足够元素，dst_ptr 在 count 范围内连续可写，bitmap 长度充足
   unsafe {
     let mut src_idx = 0usize;
-    let mut prev = *non_repeats;
-    *dst_ptr = prev;
+    *dst_ptr = *non_repeats;
 
     let full_words = count / 64;
     let ptr_u64 = bitmap.as_ptr().cast::<u64>();
@@ -129,28 +149,29 @@ pub(crate) unsafe fn expand_repeats<F: AlpFloat>(
       let base_out = w * 64;
 
       if w == 0 {
-        // Word 0: bit 0 is already stored as element 0
-        for k in 1..8 {
-          src_idx += ((bitmap[0] >> k) & 1 ^ 1) as usize;
-          *dst_ptr.add(k) = *non_repeats.add(src_idx);
-        }
-        prev = *dst_ptr.add(7);
-        for (b, &byte) in bitmap[1..8].iter().enumerate() {
-          expand_byte(
-            byte,
-            (b + 1) * 8,
-            &mut src_idx,
-            &mut prev,
-            non_repeats,
-            dst_ptr,
-          );
+        if word == 0 {
+          copy_nonoverlapping(non_repeats.add(1), dst_ptr.add(1), 63);
+          src_idx += 63;
+        } else if word == u64::MAX {
+          let p = *non_repeats;
+          for chunk in 0..8 {
+            write_8!(dst_ptr.add(chunk * 8), _k => p);
+          }
+        } else {
+          // Word 0: bit 0 is already stored as element 0
+          for k in 1..8 {
+            src_idx += ((bitmap[0] >> k) & 1 ^ 1) as usize;
+            *dst_ptr.add(k) = *non_repeats.add(src_idx);
+          }
+          for (b, &byte) in bitmap[1..8].iter().enumerate() {
+            expand_byte(byte, (b + 1) * 8, &mut src_idx, non_repeats, dst_ptr);
+          }
         }
       } else if word == 0 {
         copy_nonoverlapping(non_repeats.add(src_idx + 1), dst_ptr.add(base_out), 64);
         src_idx += 64;
-        prev = *dst_ptr.add(base_out + 63);
       } else if word == u64::MAX {
-        let p = prev;
+        let p = *non_repeats.add(src_idx);
         unroll_8!(chunk => {
           write_8!(dst_ptr.add(base_out + chunk * 8), _k => p);
         });
@@ -161,7 +182,6 @@ pub(crate) unsafe fn expand_repeats<F: AlpFloat>(
             *bytes_ptr.add(b),
             base_out + b * 8,
             &mut src_idx,
-            &mut prev,
             non_repeats,
             dst_ptr,
           );
@@ -170,12 +190,32 @@ pub(crate) unsafe fn expand_repeats<F: AlpFloat>(
     }
 
     let rem_start = full_words * 64;
-    let start_j = if full_words == 0 { 1 } else { 0 };
-    for i in (rem_start + start_j)..count {
-      let byte_idx = i / 8;
-      let bit_idx = i % 8;
-      src_idx += ((bitmap[byte_idx] >> bit_idx) & 1 ^ 1) as usize;
-      *dst_ptr.add(i) = *non_repeats.add(src_idx);
+    let rem_count = count - rem_start;
+    if full_words > 0 {
+      let rem_bytes = rem_count / 8;
+      for b in 0..rem_bytes {
+        expand_byte(
+          bitmap[full_words * 8 + b],
+          rem_start + b * 8,
+          &mut src_idx,
+          non_repeats,
+          dst_ptr,
+        );
+      }
+      for i in (rem_start + rem_bytes * 8)..count {
+        let byte_idx = i / 8;
+        let bit_idx = i % 8;
+        src_idx += ((bitmap[byte_idx] >> bit_idx) & 1 ^ 1) as usize;
+        *dst_ptr.add(i) = *non_repeats.add(src_idx);
+      }
+    } else {
+      let start_j = if count > 0 { 1 } else { 0 };
+      for i in start_j..count {
+        let byte_idx = i / 8;
+        let bit_idx = i % 8;
+        src_idx += ((bitmap[byte_idx] >> bit_idx) & 1 ^ 1) as usize;
+        *dst_ptr.add(i) = *non_repeats.add(src_idx);
+      }
     }
   }
 }

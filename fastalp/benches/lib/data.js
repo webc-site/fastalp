@@ -126,10 +126,10 @@ export const SCENARIO_DATASET_MAP = {
     "cms1", "cms25", "cms9", "medicare1", "medicare9"
   ],
   scene_macro: [
-    "gov10", "gov26", "gov30", "gov31", "gov40", "noaa_water_sigma"
+    "gov10", "gov26", "gov30", "gov31", "gov40"
   ],
   scene_waveform: [
-    "usgs_river_discharge", "noaa_water_level", "ssd_hdd_benchmarks_f"
+    "usgs_river_discharge", "noaa_water_level", "noaa_water_sigma", "ssd_hdd_benchmarks_f"
   ]
 };
 

@@ -75,11 +75,11 @@ scene_health_badge: "5 组数据 · 5,120 点"
 
 scene_macro_title: "公共政务民生与宏观统计普查"
 scene_macro_sub: "来源: 财政转移支付 / 人口普查常数 / 宏观运行指标"
-scene_macro_badge: "6 组数据 · 6,144 点"
+scene_macro_badge: "5 组数据 · 5,120 点"
 
 scene_waveform_title: "物理连续波形与海洋水文观测"
 scene_waveform_sub: "来源: USGS河流流量 / NOAA水文潮位 / 固态存储I/O"
-scene_waveform_badge: "3 组数据 · 3,072 点"
+scene_waveform_badge: "4 组数据 · 4,096 点"
 
 sc_col_algo: "算法名称"
 sc_col_dec: "解压吞吐"

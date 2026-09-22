@@ -262,18 +262,18 @@ ${scenarioRows}
   - \`cms9\`：专科处方药品报销结算价格流水 · [CWI PublicBI CMSProvider 医疗保险数据库](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CMSprovider/)
   - \`cms25\`：医疗设备使用与专科诊疗收费项目 · [CWI PublicBI CMSProvider 医疗保险数据库](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CMSprovider/)
 
-- **公共政务与宏观经济（6 项）**
+- **公共政务与宏观经济（5 项）**
   - \`gov10\`：财政预算与公共支出明细统计指标 · [CWI PublicBI CommonGovernment 统计集](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/)
   - \`gov26\`：国家人口普查低熵常数序列流 · [CWI PublicBI CommonGovernment 统计集](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/)
   - \`gov30\`：宏观经济运行指标与财政综合统计 · [CWI PublicBI CommonGovernment 统计集](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/)
   - \`gov31\`：财政转移支付与地区扶持资金时序 · [CWI PublicBI CommonGovernment 统计集](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/)
   - \`gov40\`：市政公用管网工程高精测绘与统计 · [CWI PublicBI CommonGovernment 统计集](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/)
-  - \`noaa_water_sigma\`：基韦斯特潮位观测误差标准差（1024 点）· [NOAA 潮汐与水流观测数据系统 (CO-OPS 8724580)](https://tidesandcurrents.noaa.gov/waterlevels.html?id=8724580)
 
-- **硬件存储与连续水文波形（3 项）**
+- **硬件存储与连续水文波形（4 项）**
   - \`ssd_hdd_benchmarks_f\`：固态硬盘与机械硬盘连续 I/O 吞吐基准 · [Kaggle 存储设备吞吐实测数据库](https://www.kaggle.com/datasets/alanjo/ssd-and-hdd-benchmarks)
   - \`usgs_river_discharge\`：波托马克河华盛顿站连续河流流量（1024 点）· [USGS 国家水文信息系统 (NWIS Site 01646500)](https://waterdata.usgs.gov/monitoring-location/01646500/)
   - \`noaa_water_level\`：波士顿港 6 分钟连续水尺水位观测（1024 点）· [NOAA 潮汐与水流观测数据系统 (CO-OPS 8443970)](https://tidesandcurrents.noaa.gov/waterlevels.html?id=8443970)
+  - \`noaa_water_sigma\`：基韦斯特潮位观测误差标准差（1024 点）· [NOAA 潮汐与水流观测数据系统 (CO-OPS 8724580)](https://tidesandcurrents.noaa.gov/waterlevels.html?id=8724580)
 `;
   }
 
@@ -351,8 +351,8 @@ Evaluated on all 31 public datasets from the original ALP paper plus 6 real-worl
 - **Quantitative Finance & Trading (7 datasets)**: [\`stocks_usa_c\`](https://zenodo.org/record/3886895), [\`stocks_de\`](https://zenodo.org/record/3886895), [\`stocks_uk\`](https://zenodo.org/record/3886895), [\`bitcoin_f\`](https://raw.githubusercontent.com/influxdata/influxdb2-sample-data/master/bitcoin-price-data/bitcoin-historical-annotated.csv), [\`bitcoin_transactions_f\`](https://gz.blockchair.com/bitcoin/transactions/), [\`food_prices\`](https://data.humdata.org/dataset/wfp-food-prices), [\`isd_sea_pressure\`](https://www.ncei.noaa.gov/pub/data/noaa/isd-lite/).
 - **Geographic Mapping & Trajectories (5 datasets)**: [\`poi_lat\`](https://www.kaggle.com/datasets/ehallmar/points-of-interest-poi-database), [\`poi_lon\`](https://www.kaggle.com/datasets/ehallmar/points-of-interest-poi-database), [\`bird_migration_f\`](https://github.com/influxdata/influxdb2-sample-data/blob/master/bird-migration-data/bird-migration.csv), [\`nyc29\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/NYC/), [\`usgs_gage_height\`](https://waterdata.usgs.gov/monitoring-location/06934500/).
 - **Healthcare & Public Assistance (5 datasets)**: [\`medicare1\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/Medicare3/), [\`medicare9\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/Medicare3/), [\`cms1\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CMSprovider/), [\`cms9\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CMSprovider/), [\`cms25\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CMSprovider/).
-- **Government & Macroeconomics (6 datasets)**: [\`gov10\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/), [\`gov26\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/), [\`gov30\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/), [\`gov31\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/), [\`gov40\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/), [\`noaa_water_sigma\`](https://tidesandcurrents.noaa.gov/waterlevels.html?id=8724580).
-- **Hardware Storage & Continuous Hydrology (3 datasets)**: [\`ssd_hdd_benchmarks_f\`](https://www.kaggle.com/datasets/alanjo/ssd-and-hdd-benchmarks), [\`usgs_river_discharge\`](https://waterdata.usgs.gov/monitoring-location/01646500/), [\`noaa_water_level\`](https://tidesandcurrents.noaa.gov/waterlevels.html?id=8443970).
+- **Government & Macroeconomics (5 datasets)**: [\`gov10\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/), [\`gov26\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/), [\`gov30\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/), [\`gov31\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/), [\`gov40\`](https://homepages.cwi.nl/~boncz/PublicBIbenchmark/CommonGovernment/).
+- **Hardware Storage & Continuous Hydrology (4 datasets)**: [\`ssd_hdd_benchmarks_f\`](https://www.kaggle.com/datasets/alanjo/ssd-and-hdd-benchmarks), [\`usgs_river_discharge\`](https://waterdata.usgs.gov/monitoring-location/01646500/), [\`noaa_water_level\`](https://tidesandcurrents.noaa.gov/waterlevels.html?id=8443970), [\`noaa_water_sigma\`](https://tidesandcurrents.noaa.gov/waterlevels.html?id=8724580).
 `;
 };
 

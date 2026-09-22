@@ -267,13 +267,25 @@ pub(crate) fn compress_into_engine<F: AlpFloat>(
   // Exception backfill: patch with predecessor value to eliminate delta cliffs
   // 异常值回填：填充前一个有效整型值，消除相邻一阶差分的跳变
   if !exceptions.is_empty() {
+    let first_valid_idx = exceptions
+      .iter()
+      .enumerate()
+      .position(|(i, e)| e.pos != i)
+      .unwrap_or(exceptions.len());
+    let first_valid = if first_valid_idx < count {
+      // SAFETY: first_valid_idx < count is verified
+      unsafe { *encoded_ints.get_unchecked(first_valid_idx) }
+    } else {
+      base
+    };
+
     for exc in exceptions.iter() {
       let patch_val = if exc.pos > 0 {
         // SAFETY: exc.pos > 0 and strictly less than encoded_ints.len()
         // SAFETY: exc.pos > 0 且严格小于 encoded_ints.len()
         unsafe { *encoded_ints.get_unchecked(exc.pos - 1) }
       } else {
-        base
+        first_valid
       };
       // SAFETY: exc.pos is strictly less than encoded_ints.len()
       // SAFETY: exc.pos 严格小于 encoded_ints.len()

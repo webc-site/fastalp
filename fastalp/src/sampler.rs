@@ -29,6 +29,22 @@ const LOW_COST_THRESHOLD_PER_VAL: usize = 3;
 /// High exponent threshold to trigger decimal division
 /// 触发十进制除法的高精度指数阈值
 const HIGH_EXP_DIV_THRESHOLD: u8 = 14;
+/// High exception threshold in sample evaluation to prevent near-overflow RAW fallback (3/32 = 9.375%)
+/// 采样评估中触发高危异常惩罚的阈值（3/32 = 9.375%，逼近 1024 满块 128 上限）
+const HIGH_EXC_THRESHOLD: usize = 3;
+/// Penalty multiplier for high exception counts to strongly discourage near-overflow parameters
+/// 高危异常惩罚乘数
+const HIGH_EXC_PENALTY_MULT: usize = 4;
+
+#[inline(always)]
+fn calc_exc_cost<F: AlpFloat>(exceptions: usize) -> usize {
+  let mult = if exceptions >= HIGH_EXC_THRESHOLD {
+    HIGH_EXC_PENALTY_MULT
+  } else {
+    1
+  };
+  exceptions * F::EXCEPTION_PENALTY * mult
+}
 
 /// Common high-frequency decimal exponent exploration order
 /// Over 95% of sensor, financial, and metric time-series have 1-3 decimals or integers.
@@ -72,13 +88,35 @@ pub(crate) fn find_best_params<F: AlpFloat>(samples: &[F]) -> BestParams {
 
   let mut valid_samples: [F; SAMPLES_COUNT] = [F::ZERO; SAMPLES_COUNT];
   let mut sample_len = 0;
-  for &val in samples
-    .iter()
-    .filter(|v| !v.is_impossible())
-    .take(SAMPLES_COUNT)
-  {
-    valid_samples[sample_len] = val;
-    sample_len += 1;
+
+  const SAMPLE_RUN_LEN: usize = 8;
+  const SAMPLE_RUNS: usize = 4;
+
+  if samples.len() <= SAMPLES_COUNT {
+    for &val in samples.iter().filter(|v| !v.is_impossible()) {
+      valid_samples[sample_len] = val;
+      sample_len += 1;
+    }
+  } else {
+    let stride = (samples.len() - SAMPLE_RUN_LEN) / (SAMPLE_RUNS - 1);
+    for r in 0..SAMPLE_RUNS {
+      let start = r * stride;
+      for &val in &samples[start..start + SAMPLE_RUN_LEN] {
+        if !val.is_impossible() && sample_len < SAMPLES_COUNT {
+          valid_samples[sample_len] = val;
+          sample_len += 1;
+        }
+      }
+    }
+    if sample_len < SAMPLES_COUNT {
+      for &val in samples.iter().filter(|v| !v.is_impossible()) {
+        if sample_len >= SAMPLES_COUNT {
+          break;
+        }
+        valid_samples[sample_len] = val;
+        sample_len += 1;
+      }
+    }
   }
 
   let active_samples = &valid_samples[..sample_len];
@@ -150,7 +188,7 @@ pub(crate) fn find_best_params<F: AlpFloat>(samples: &[F]) -> BestParams {
             0
           };
           let bit_width = F::bits_needed(max_offset) as usize;
-          let total_cost = bit_width * sample_len + exceptions * F::EXCEPTION_PENALTY;
+          let total_cost = bit_width * sample_len + calc_exc_cost::<F>(exceptions);
 
           if total_cost < best_cost {
             best_cost = total_cost;
@@ -208,7 +246,7 @@ pub(crate) fn find_best_params<F: AlpFloat>(samples: &[F]) -> BestParams {
             0
           };
           let bit_width = F::bits_needed(max_offset) as usize;
-          let total_cost = bit_width * sample_len + div_exceptions * F::EXCEPTION_PENALTY;
+          let total_cost = bit_width * sample_len + calc_exc_cost::<F>(div_exceptions);
 
           if total_cost < best_cost {
             best_cost = total_cost;
@@ -299,7 +337,7 @@ pub(crate) fn find_best_params<F: AlpFloat>(samples: &[F]) -> BestParams {
           0
         };
         let bit_width = F::bits_needed(max_offset) as usize;
-        let total_cost = bit_width * sample_len + exceptions * F::EXCEPTION_PENALTY + fac_penalty;
+        let total_cost = bit_width * sample_len + calc_exc_cost::<F>(exceptions) + fac_penalty;
 
         if total_cost < best_cost {
           best_cost = total_cost;

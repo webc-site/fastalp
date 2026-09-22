@@ -185,6 +185,11 @@ impl AlpFloat for f32 {
   }
 
   #[inline(always)]
+  fn u64_to_int(offset: u64) -> Self::Int {
+    offset as i32
+  }
+
+  #[inline(always)]
   fn calc_range(min_val: Self::Int, max_val: Self::Int) -> u64 {
     max_val.wrapping_sub(min_val) as u32 as u64
   }

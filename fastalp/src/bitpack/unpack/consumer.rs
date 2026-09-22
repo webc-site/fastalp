@@ -203,7 +203,7 @@ impl<F: AlpFloat, D: AlpDecoder<F>> AlpConsumer<F> for ForConsumer<F, D> {
 pub struct AlpDeltaConsumer<F: AlpFloat, D: AlpDecoder<F>> {
   pub curr: F::Int,
   pub min_delta: F::Int,
-  pub m_steps: [F::Int; 4],
+  pub m_steps: [F::Int; 5],
   pub decoder: D,
   pub _phantom: PhantomData<F>,
 }
@@ -215,10 +215,11 @@ impl<F: AlpFloat, D: AlpDecoder<F>> AlpDeltaConsumer<F, D> {
     let m2 = F::int_add(m1, m1);
     let m3 = F::int_add(m2, m1);
     let m4 = F::int_add(m2, m2);
+    let m8 = F::int_add(m4, m4);
     Self {
       curr,
       min_delta,
-      m_steps: [m1, m2, m3, m4],
+      m_steps: [m1, m2, m3, m4, m8],
       decoder,
       _phantom: PhantomData,
     }
@@ -228,14 +229,14 @@ impl<F: AlpFloat, D: AlpDecoder<F>> AlpDeltaConsumer<F, D> {
 impl<F: AlpFloat, D: AlpDecoder<F>> AlpConsumer<F> for AlpDeltaConsumer<F, D> {
   #[inline(always)]
   unsafe fn consume_8(&mut self, chunk: [u64; 8], dst_ptr: *mut F) {
-    let u0 = F::u64_to_int_add(chunk[0], F::ZERO_INT);
-    let u1 = F::u64_to_int_add(chunk[1], F::ZERO_INT);
-    let u2 = F::u64_to_int_add(chunk[2], F::ZERO_INT);
-    let u3 = F::u64_to_int_add(chunk[3], F::ZERO_INT);
-    let u4 = F::u64_to_int_add(chunk[4], F::ZERO_INT);
-    let u5 = F::u64_to_int_add(chunk[5], F::ZERO_INT);
-    let u6 = F::u64_to_int_add(chunk[6], F::ZERO_INT);
-    let u7 = F::u64_to_int_add(chunk[7], F::ZERO_INT);
+    let u0 = F::u64_to_int(chunk[0]);
+    let u1 = F::u64_to_int(chunk[1]);
+    let u2 = F::u64_to_int(chunk[2]);
+    let u3 = F::u64_to_int(chunk[3]);
+    let u4 = F::u64_to_int(chunk[4]);
+    let u5 = F::u64_to_int(chunk[5]);
+    let u6 = F::u64_to_int(chunk[6]);
+    let u7 = F::u64_to_int(chunk[7]);
 
     // 二叉平衡树并行计算两个 4 元组内的偏前缀和
     let p01 = F::int_add(u0, u1);
@@ -250,7 +251,7 @@ impl<F: AlpFloat, D: AlpDecoder<F>> AlpConsumer<F> for AlpDeltaConsumer<F, D> {
     let m2 = self.m_steps[1];
     let m3 = self.m_steps[2];
     let m4 = self.m_steps[3];
-    let m8 = F::int_add(m4, m4);
+    let m8 = self.m_steps[4];
 
     // delta_total 完全独立于 curr 预先就绪
     let total_u = F::int_add(p0123, p4567);
@@ -286,6 +287,119 @@ impl<F: AlpFloat, D: AlpDecoder<F>> AlpConsumer<F> for AlpDeltaConsumer<F, D> {
     self.curr = next;
     unsafe {
       *dst_ptr = self.decoder.decode_int(next);
+    }
+  }
+
+  #[inline(always)]
+  unsafe fn consume_zeros(&mut self, count: usize, dst_ptr: *mut F) {
+    if self.min_delta == F::ZERO_INT {
+      let val = self.decoder.decode_int(self.curr);
+      let full_8 = count / 8;
+      for g in 0..full_8 {
+        unsafe {
+          write_8!(dst_ptr.add(g * 8), _k => val);
+        }
+      }
+      for i in (full_8 * 8)..count {
+        unsafe {
+          *dst_ptr.add(i) = val;
+        }
+      }
+    } else {
+      let m1 = self.m_steps[0];
+      for i in 0..count {
+        let next = F::int_add(self.curr, m1);
+        self.curr = next;
+        unsafe {
+          *dst_ptr.add(i) = self.decoder.decode_int(next);
+        }
+      }
+    }
+  }
+}
+
+/// Zero-min-delta specialized fused consumer: zero delta base, zero m-step overhead.
+/// min_delta == 0 极速特化单态化消费者：无需维护与累加任何等差公差，前缀和计算吞吐最大化
+pub struct AlpDeltaZeroMinConsumer<F: AlpFloat, D: AlpDecoder<F>> {
+  pub curr: F::Int,
+  pub decoder: D,
+  pub _phantom: PhantomData<F>,
+}
+
+impl<F: AlpFloat, D: AlpDecoder<F>> AlpDeltaZeroMinConsumer<F, D> {
+  #[inline(always)]
+  pub fn new(curr: F::Int, decoder: D) -> Self {
+    Self {
+      curr,
+      decoder,
+      _phantom: PhantomData,
+    }
+  }
+}
+
+impl<F: AlpFloat, D: AlpDecoder<F>> AlpConsumer<F> for AlpDeltaZeroMinConsumer<F, D> {
+  #[inline(always)]
+  unsafe fn consume_8(&mut self, chunk: [u64; 8], dst_ptr: *mut F) {
+    let u0 = F::u64_to_int(chunk[0]);
+    let u1 = F::u64_to_int(chunk[1]);
+    let u2 = F::u64_to_int(chunk[2]);
+    let u3 = F::u64_to_int(chunk[3]);
+    let u4 = F::u64_to_int(chunk[4]);
+    let u5 = F::u64_to_int(chunk[5]);
+    let u6 = F::u64_to_int(chunk[6]);
+    let u7 = F::u64_to_int(chunk[7]);
+
+    let p01 = F::int_add(u0, u1);
+    let p23 = F::int_add(u2, u3);
+    let p45 = F::int_add(u4, u5);
+    let p67 = F::int_add(u6, u7);
+
+    let p0123 = F::int_add(p01, p23);
+    let p4567 = F::int_add(p45, p67);
+
+    let delta_total = F::int_add(p0123, p4567);
+    let curr = self.curr;
+    self.curr = F::int_add(curr, delta_total);
+
+    let c0 = F::int_add(curr, u0);
+    let c1 = F::int_add(curr, p01);
+    let c2 = F::int_add(curr, F::int_add(p01, u2));
+    let c3 = F::int_add(curr, p0123);
+
+    let b1 = c3;
+    let c4 = F::int_add(b1, u4);
+    let c5 = F::int_add(b1, p45);
+    let c6 = F::int_add(b1, F::int_add(p45, u6));
+    let c7 = self.curr;
+
+    let c = [c0, c1, c2, c3, c4, c5, c6, c7];
+    unsafe {
+      write_8!(dst_ptr, k => self.decoder.decode_int(c[k]));
+    }
+  }
+
+  #[inline(always)]
+  unsafe fn consume_1(&mut self, off: u64, dst_ptr: *mut F) {
+    let next = F::int_add(self.curr, F::u64_to_int(off));
+    self.curr = next;
+    unsafe {
+      *dst_ptr = self.decoder.decode_int(next);
+    }
+  }
+
+  #[inline(always)]
+  unsafe fn consume_zeros(&mut self, count: usize, dst_ptr: *mut F) {
+    let val = self.decoder.decode_int(self.curr);
+    let full_8 = count / 8;
+    for g in 0..full_8 {
+      unsafe {
+        write_8!(dst_ptr.add(g * 8), _k => val);
+      }
+    }
+    for i in (full_8 * 8)..count {
+      unsafe {
+        *dst_ptr.add(i) = val;
+      }
     }
   }
 }

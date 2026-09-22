@@ -2,7 +2,9 @@ mod consumer;
 mod decoder;
 pub(crate) mod kernel;
 
-pub use consumer::{AlpConsumer, AlpDeltaConsumer, ForConsumer, RawU64Consumer};
+pub use consumer::{
+  AlpConsumer, AlpDeltaConsumer, AlpDeltaZeroMinConsumer, ForConsumer, RawU64Consumer,
+};
 pub use decoder::{
   AlpDecoder, AlpDictDecoder, AlpDivDecoder, AlpFac1Decoder, AlpMulDecoder, AlpRdConstantDecoder,
 };

@@ -8,6 +8,7 @@ set -x
 # 1. 检查并准备 C++ ALP 环境 (相对路径，不存在则自动 clone depth=1 并编译)
 ALP_DIR="${ALP_DIR:-$(cd "${DIR}/../../" && pwd)/ALP}"
 export ALP_DIR
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/_rs_fastalp}"
 
 if [ ! -d "$ALP_DIR" ]; then
   echo "=== 1. Cloning C++ ALP repo (depth=1, branch bench/self-eval) ==="

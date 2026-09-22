@@ -75,11 +75,11 @@ scene_health_badge: "5 Series · 5,120 pts"
 
 scene_macro_title: "Civic Demographics & Macroeconomics"
 scene_macro_sub: "Source: Fiscal Transfers / Demographics / Macro Index"
-scene_macro_badge: "6 Series · 6,144 pts"
+scene_macro_badge: "5 Series · 5,120 pts"
 
 scene_waveform_title: "Continuous Physical & Hydrology Streams"
 scene_waveform_sub: "Source: USGS River Discharge / NOAA Water Level / Storage I/O"
-scene_waveform_badge: "3 Series · 3,072 pts"
+scene_waveform_badge: "4 Series · 4,096 pts"
 
 sc_col_algo: "Algorithm"
 sc_col_dec: "Decompress"
