@@ -1,3 +1,4 @@
+use crate::params::EncodeFactors;
 mod f32;
 mod f64;
 
@@ -35,6 +36,7 @@ pub trait AlpFloat: Copy + Default + PartialEq + PartialOrd + Send + Sync + 'sta
   fn fac_int(fac: u8) -> i64;
   fn frac_exp(exp: u8) -> Self;
 
+  fn is_nan(self) -> bool;
   fn is_impossible(self) -> bool;
   fn try_encode_fast(self, exp_factor: Self, fac_int: i64, frac_exp: Self) -> Option<Self::Int>;
   fn try_encode_div(self, exp_factor: Self) -> Option<Self::Int>;
@@ -101,10 +103,7 @@ pub trait AlpFloat: Copy + Default + PartialEq + PartialOrd + Send + Sync + 'sta
   unsafe fn encode_simd(
     slice: &[Self],
     enc_ptr: *mut Self::Int,
-    exp_factor: Self,
-    fac_int: i64,
-    frac_exp: Self,
-    use_div: bool,
+    factors: EncodeFactors<Self>,
     exceptions: &mut Vec<Exception<Self::RawBits>>,
   ) -> (Self::Int, Self::Int);
 

@@ -1,3 +1,6 @@
+mod common;
+
+use common::{assert_slice_eq, verify_compressed, verify_roundtrip, verify_roundtrip_delta};
 use fastalp::{
   CHUNK_SIZE, CHUNK_SIZE_1024, Error, compress, compress_into, count, decompress, decompress_into,
   decompress_into_raw, decompress_into_slice,
@@ -86,13 +89,7 @@ fn test_real_world_decimals_compression_ratio() -> aok::Result<()> {
     data.push(val);
   }
 
-  let compressed = compress(&data);
-  let decompressed: Vec<f64> = decompress(&compressed)?;
-
-  assert_eq!(decompressed.len(), data.len());
-  for (a, b) in decompressed.iter().zip(data.iter()) {
-    assert_eq!(a.to_bits(), b.to_bits());
-  }
+  let compressed = verify_roundtrip(&data)?;
 
   let raw_size = data.len() * 8; // 8192 B
   let comp_size = compressed.len();
@@ -137,21 +134,7 @@ fn test_mixed_exceptions_and_special_values() -> aok::Result<()> {
   data.push(-1e30);
   data.push(1e-25);
 
-  let compressed = compress(&data);
-  let decompressed: Vec<f64> = decompress(&compressed)?;
-
-  assert_eq!(decompressed.len(), data.len());
-  for (i, (&a, &b)) in decompressed.iter().zip(data.iter()).enumerate() {
-    if a.is_nan() {
-      assert!(b.is_nan(), "index {i} expected NaN");
-    } else {
-      assert_eq!(
-        a.to_bits(),
-        b.to_bits(),
-        "index {i} bits mismatch: {a} vs {b}"
-      );
-    }
-  }
+  verify_roundtrip(&data)?;
   Ok(())
 }
 
@@ -165,19 +148,7 @@ fn test_f32_roundtrip() -> aok::Result<()> {
   data.push(f32::INFINITY);
   data.push(-0.0f32);
 
-  let mut compressed = Vec::new();
-  compress_into(&data, &mut compressed);
-  let mut decompressed: Vec<f32> = Vec::new();
-  decompress_into(&compressed, &mut decompressed)?;
-
-  assert_eq!(decompressed.len(), data.len());
-  for (i, (&a, &b)) in decompressed.iter().zip(data.iter()).enumerate() {
-    if a.is_nan() {
-      assert!(b.is_nan(), "index {i} expected NaN");
-    } else {
-      assert_eq!(a.to_bits(), b.to_bits(), "index {i} bits mismatch");
-    }
-  }
+  verify_roundtrip(&data)?;
   Ok(())
 }
 
@@ -191,13 +162,7 @@ fn test_random_floats_stress() -> aok::Result<()> {
     data.push(base + decimals);
   }
 
-  let compressed = compress(&data);
-  let decompressed: Vec<f64> = decompress(&compressed)?;
-
-  assert_eq!(decompressed.len(), data.len());
-  for (a, b) in decompressed.iter().zip(data.iter()) {
-    assert_eq!(a.to_bits(), b.to_bits());
-  }
+  verify_roundtrip(&data)?;
   Ok(())
 }
 
@@ -209,12 +174,7 @@ fn test_negative_decimals_and_various_sizes() -> aok::Result<()> {
       let val = -((i as f64) * 0.125 + 50.0);
       data.push(val);
     }
-    let compressed = compress(&data);
-    let decompressed: Vec<f64> = decompress(&compressed)?;
-    assert_eq!(decompressed.len(), data.len());
-    for (a, b) in decompressed.iter().zip(data.iter()) {
-      assert_eq!(a.to_bits(), b.to_bits());
-    }
+    verify_roundtrip(&data)?;
   }
   Ok(())
 }
@@ -229,32 +189,17 @@ fn test_large_vector_stress() -> aok::Result<()> {
     data.push(val);
   }
 
-  let compressed = compress(&data);
-  let decompressed: Vec<f64> = decompress(&compressed)?;
-  assert_eq!(decompressed.len(), data.len());
-  for (a, b) in decompressed.iter().zip(data.iter()) {
-    assert_eq!(a.to_bits(), b.to_bits());
-  }
+  verify_roundtrip(&data)?;
   Ok(())
 }
 
 #[test]
 fn test_negative_zero_preservation() -> aok::Result<()> {
   let data = [0.0f64, -0.0f64, 0.0f64, -0.0f64];
-  let compressed = compress(&data);
-  let decompressed: Vec<f64> = decompress(&compressed)?;
-  assert_eq!(decompressed.len(), 4);
-  for (a, b) in decompressed.iter().zip(data.iter()) {
-    assert_eq!(a.to_bits(), b.to_bits());
-  }
+  verify_roundtrip(&data)?;
 
   let data_f32 = [0.0f32, -0.0f32, 0.0f32, -0.0f32];
-  let compressed_f32 = compress(&data_f32);
-  let decompressed_f32: Vec<f32> = decompress(&compressed_f32)?;
-  assert_eq!(decompressed_f32.len(), 4);
-  for (a, b) in decompressed_f32.iter().zip(data_f32.iter()) {
-    assert_eq!(a.to_bits(), b.to_bits());
-  }
+  verify_roundtrip(&data_f32)?;
   Ok(())
 }
 
@@ -275,10 +220,7 @@ fn test_raw_fallback_incompressible_data() -> aok::Result<()> {
   );
   assert_eq!(raw_header_len(1024), 1);
   let decompressed: Vec<f64> = decompress(&compressed)?;
-  assert_eq!(decompressed.len(), random_bits_data.len());
-  for (a, b) in decompressed.iter().zip(random_bits_data.iter()) {
-    assert_eq!(a.to_bits(), b.to_bits());
-  }
+  assert_slice_eq(&random_bits_data, &decompressed);
 
   let random_bits_f32: Vec<f32> = (0..1024)
     .map(|_| f32::from_bits(fastrand::u32(..)))
@@ -293,10 +235,7 @@ fn test_raw_fallback_incompressible_data() -> aok::Result<()> {
   );
   assert_eq!(raw_header_len(1024), 1);
   let decompressed_f32: Vec<f32> = decompress(&compressed_f32)?;
-  assert_eq!(decompressed_f32.len(), random_bits_f32.len());
-  for (a, b) in decompressed_f32.iter().zip(random_bits_f32.iter()) {
-    assert_eq!(a.to_bits(), b.to_bits());
-  }
+  assert_slice_eq(&random_bits_f32, &decompressed_f32);
   Ok(())
 }
 
@@ -305,24 +244,13 @@ fn test_large_array_u32_roundtrip() -> aok::Result<()> {
   // 超过 65535 元素的大数组测试，验证 u32 长度标签与 u32 异常索引无损编解码
   let size = 70_000usize;
   let mut data: Vec<f64> = (0..size).map(|i| (i as f64) * 0.125).collect();
-  // 注入偶发异常值
   data[100] = f64::NAN;
   data[66_000] = 99999999.12345;
 
-  let compressed = compress(&data);
+  let compressed = verify_roundtrip(&data)?;
   let hdr = read_header(&compressed)?;
   assert_eq!(hdr.count, size);
   assert_eq!(hdr.len_tag, LEN_TAG_U32);
-
-  let decompressed: Vec<f64> = decompress(&compressed)?;
-  assert_eq!(decompressed.len(), size);
-  for (i, (&orig, &dec)) in data.iter().zip(&decompressed).enumerate() {
-    if orig.is_nan() {
-      assert!(dec.is_nan(), "expected NaN at {i}");
-    } else {
-      assert_eq!(orig.to_bits(), dec.to_bits(), "mismatch at {i}");
-    }
-  }
   Ok(())
 }
 
@@ -334,27 +262,15 @@ fn test_large_array_f32_u32_roundtrip() -> aok::Result<()> {
   data[50] = f32::NAN;
   data[67_000] = 88888.5f32;
 
-  let compressed = compress(&data);
+  let compressed = verify_roundtrip(&data)?;
   let hdr = read_header(&compressed)?;
   assert_eq!(hdr.count, size);
   assert_eq!(hdr.len_tag, LEN_TAG_U32);
-
-  let decompressed: Vec<f32> = decompress(&compressed)?;
-  assert_eq!(decompressed.len(), size);
-  for (i, (&orig, &dec)) in data.iter().zip(&decompressed).enumerate() {
-    if orig.is_nan() {
-      assert!(dec.is_nan(), "expected NaN at {i}");
-    } else {
-      assert_eq!(orig.to_bits(), dec.to_bits(), "mismatch at {i}");
-    }
-  }
   Ok(())
 }
 
 #[test]
 fn test_large_array_delta_u32_roundtrip() -> aok::Result<()> {
-  use fastalp::compress_delta;
-
   // 超过 65535 元素的强制 Delta 一阶差分测试，验证 1024 栈分批流式解包与 u32 异常无损恢复
   let size = 75_000usize;
   let mut data: Vec<f64> = (0..size)
@@ -363,20 +279,10 @@ fn test_large_array_delta_u32_roundtrip() -> aok::Result<()> {
   data[10] = f64::NAN;
   data[70_000] = 999999.99;
 
-  let compressed = compress_delta(&data);
+  let compressed = verify_roundtrip_delta(&data)?;
   let hdr = read_header(&compressed)?;
   assert_eq!(hdr.count, size);
   assert_eq!(hdr.len_tag, LEN_TAG_U32);
-
-  let decompressed: Vec<f64> = decompress(&compressed)?;
-  assert_eq!(decompressed.len(), size);
-  for (i, (&orig, &dec)) in data.iter().zip(&decompressed).enumerate() {
-    if orig.is_nan() {
-      assert!(dec.is_nan(), "expected NaN at {i}");
-    } else {
-      assert_eq!(orig.to_bits(), dec.to_bits(), "mismatch at {i}");
-    }
-  }
   Ok(())
 }
 
@@ -394,24 +300,14 @@ fn test_stateful_encoder_roundtrip_and_invalidation() -> aok::Result<()> {
   assert!(encoder.cached_params.is_some());
   let p1 = encoder.cached_params.unwrap();
   assert_eq!(p1.exp, 2);
-
-  let d1: Vec<f64> = decompress(&c1)?;
-  assert_eq!(d1.len(), block1.len());
-  for (orig, dec) in block1.iter().zip(&d1) {
-    assert_eq!(orig.to_bits(), dec.to_bits());
-  }
+  verify_compressed(&block1, &c1)?;
 
   // 2. 第二个块：同类型数据，成功复用 cached_params
   let block2: Vec<f64> = (1024..2048).map(|i| (i as f64) * 0.25 + 10.0).collect();
   let mut c2 = Vec::new();
   encoder.compress_into(&block2, &mut c2);
   assert_eq!(encoder.cached_params, Some(p1));
-
-  let d2: Vec<f64> = decompress(&c2)?;
-  assert_eq!(d2.len(), block2.len());
-  for (orig, dec) in block2.iter().zip(&d2) {
-    assert_eq!(orig.to_bits(), dec.to_bits());
-  }
+  verify_compressed(&block2, &c2)?;
 
   // 3. 第三个块：数据分布突变（6 位小数），但前 4 个元素碰巧为整数
   // 验证重新探测挽救机制：能自动识别缓存失效并成功以新参数压缩
@@ -424,12 +320,7 @@ fn test_stateful_encoder_roundtrip_and_invalidation() -> aok::Result<()> {
   assert!(encoder.cached_params.is_some());
   let p3 = encoder.cached_params.unwrap();
   assert_eq!(p3.exp, 6);
-
-  let d3: Vec<f64> = decompress(&c3)?;
-  assert_eq!(d3.len(), block3.len());
-  for (orig, dec) in block3.iter().zip(&d3) {
-    assert_eq!(orig.to_bits(), dec.to_bits());
-  }
+  verify_compressed(&block3, &c3)?;
 
   // 4. 重置编码器缓存
   encoder.reset();
@@ -445,12 +336,7 @@ fn test_stateful_encoder_roundtrip_and_invalidation() -> aok::Result<()> {
     encoder.cached_params.is_none(),
     "RAW 块不应保留有效缓存参数"
   );
-
-  let d_raw: Vec<f64> = decompress(&c_raw)?;
-  assert_eq!(d_raw.len(), raw_block.len());
-  for (orig, dec) in raw_block.iter().zip(&d_raw) {
-    assert_eq!(orig.to_bits(), dec.to_bits());
-  }
+  verify_compressed(&raw_block, &c_raw)?;
 
   Ok(())
 }
@@ -467,22 +353,13 @@ fn test_stateful_encoder_capacity_and_delta() -> aok::Result<()> {
   let mut compressed = Vec::new();
   encoder.compress_delta_into(&data, &mut compressed);
   assert!(encoder.cached_params.is_some());
-
-  let restored: Vec<f64> = decompress(&compressed)?;
-  assert_eq!(restored.len(), data.len());
-  for (a, b) in data.iter().zip(&restored) {
-    assert_eq!(a.to_bits(), b.to_bits());
-  }
+  verify_compressed(&data, &compressed)?;
 
   // 2. 第二个块继续复用
   let data2: Vec<f64> = (1024..2048).map(|i| 1000.0 + (i as f64) * 0.1).collect();
   compressed.clear();
   encoder.compress_delta_into(&data2, &mut compressed);
-  let restored2: Vec<f64> = decompress(&compressed)?;
-  assert_eq!(restored2.len(), data2.len());
-  for (a, b) in data2.iter().zip(&restored2) {
-    assert_eq!(a.to_bits(), b.to_bits());
-  }
+  verify_compressed(&data2, &compressed)?;
 
   Ok(())
 }
@@ -516,9 +393,7 @@ fn test_capi_roundtrip() {
     )
   };
   assert_eq!(dec_count_f64, 1024);
-  for i in 0..1024 {
-    assert_eq!(data_f64[i].to_bits(), dec_f64[i].to_bits());
-  }
+  assert_slice_eq(&data_f64, &dec_f64);
 
   let data_f32: Vec<f32> = (0..1024).map(|i| (i as f32) * 0.25).collect();
   let written_f32 = unsafe {
@@ -541,9 +416,7 @@ fn test_capi_roundtrip() {
     )
   };
   assert_eq!(dec_count_f32, 1024);
-  for i in 0..1024 {
-    assert_eq!(data_f32[i].to_bits(), dec_f32[i].to_bits());
-  }
+  assert_slice_eq(&data_f32, &dec_f32);
 
   // Test max compressed size helpers
   let max_f64 = fastalp::fastalp_max_compressed_size_f64(1024);
@@ -692,10 +565,7 @@ fn test_exposed_utilities() -> aok::Result<()> {
 
 #[test]
 fn test_dictionary_mode_roundtrip() -> fastalp::Result<()> {
-  use fastalp::{
-    compress, decompress,
-    header::{TYPE_F64_DICT, read_header},
-  };
+  use fastalp::header::{TYPE_F64_DICT, read_header};
 
   // 1. 20 个离散值随机分布（模拟 scene_macro），验证字典压缩模式与完全无损解压
   let dict_vals = [
@@ -718,12 +588,7 @@ fn test_dictionary_mode_roundtrip() -> fastalp::Result<()> {
     "1024 个 20 离散浮点数字典压缩大小应 <= 850B，实际：{}B",
     compressed.len()
   );
-
-  let decompressed: Vec<f64> = decompress(&compressed)?;
-  assert_eq!(decompressed.len(), data.len());
-  for (orig, dec) in data.iter().zip(&decompressed) {
-    assert_eq!(orig.to_bits(), dec.to_bits());
-  }
+  verify_compressed(&data, &compressed)?;
 
   // 2. 两个交替浮点数（高精度非整数），无连续重复，字典压缩位宽应为 1
   let mut alt_data = Vec::with_capacity(1024);
@@ -739,11 +604,7 @@ fn test_dictionary_mode_roundtrip() -> fastalp::Result<()> {
   assert_eq!(hdr_alt.type_byte, TYPE_F64_DICT);
   // 1 字节头部 + 2 字节元数据 + 16 字节字典 + 1024/8 = 128 字节位打包 = 147 字节
   assert!(comp_alt.len() <= 160);
-  let dec_alt: Vec<f64> = decompress(&comp_alt)?;
-  assert_eq!(dec_alt.len(), alt_data.len());
-  for (orig, dec) in alt_data.iter().zip(&dec_alt) {
-    assert_eq!(orig.to_bits(), dec.to_bits());
-  }
+  verify_compressed(&alt_data, &comp_alt)?;
 
   // 3. 所有元素全部相同的单值字典压缩
   let single_data = vec![42.5f64; 1024];
@@ -751,18 +612,14 @@ fn test_dictionary_mode_roundtrip() -> fastalp::Result<()> {
   let hdr_single = read_header(&comp_single)?;
   assert_eq!(hdr_single.type_byte, TYPE_F64_DICT);
   assert!(comp_single.len() <= 15);
-  let dec_single: Vec<f64> = decompress(&comp_single)?;
-  assert_eq!(dec_single, single_data);
+  verify_compressed(&single_data, &comp_single)?;
 
   Ok(())
 }
 
 #[test]
 fn test_dictionary_mode_f32_roundtrip() -> fastalp::Result<()> {
-  use fastalp::{
-    compress, decompress,
-    header::{TYPE_F32_DICT, read_header},
-  };
+  use fastalp::header::{TYPE_F32_DICT, read_header};
 
   let dict_vals = [10.5f32, -20.25, 0.0, -0.0, 100.125, 999.0];
   let mut data = Vec::with_capacity(1024);
@@ -773,22 +630,14 @@ fn test_dictionary_mode_f32_roundtrip() -> fastalp::Result<()> {
   let compressed = compress(&data);
   let hdr = read_header(&compressed)?;
   assert_eq!(hdr.type_byte, TYPE_F32_DICT);
-
-  let decompressed: Vec<f32> = decompress(&compressed)?;
-  assert_eq!(decompressed.len(), data.len());
-  for (orig, dec) in data.iter().zip(&decompressed) {
-    assert_eq!(orig.to_bits(), dec.to_bits());
-  }
+  verify_compressed(&data, &compressed)?;
 
   Ok(())
 }
 
 #[test]
 fn test_rd_mode_roundtrip() -> fastalp::Result<()> {
-  use fastalp::{
-    compress, decompress,
-    header::{TYPE_F64_RD, read_header},
-  };
+  use fastalp::header::{TYPE_F64_RD, read_header};
 
   // 构造真实双精度高熵尾数数据（指数集中在极少离散值，低位尾数连续高熵分布，无法十进制化）
   // 此时标准 ALP 回退，ALP-RD 高低位解耦可自动触发并高吞吐无损编解码
@@ -812,22 +661,14 @@ fn test_rd_mode_roundtrip() -> fastalp::Result<()> {
     compressed.len() < data.len() * 8,
     "ALP-RD 压缩体积应小于未压缩原始体积"
   );
-
-  let decompressed: Vec<f64> = decompress(&compressed)?;
-  assert_eq!(decompressed.len(), data.len());
-  for (orig, dec) in data.iter().zip(&decompressed) {
-    assert_eq!(orig.to_bits(), dec.to_bits());
-  }
+  verify_compressed(&data, &compressed)?;
 
   Ok(())
 }
 
 #[test]
 fn test_rd_mode_f32_roundtrip() -> fastalp::Result<()> {
-  use fastalp::{
-    compress, decompress,
-    header::{TYPE_F32_RD, read_header},
-  };
+  use fastalp::header::{TYPE_F32_RD, read_header};
 
   let mut data = Vec::with_capacity(1024);
   for i in 0..1024 {
@@ -846,22 +687,14 @@ fn test_rd_mode_f32_roundtrip() -> fastalp::Result<()> {
     compressed.len() < data.len() * 4,
     "f32 ALP-RD 压缩体积应小于原始体积"
   );
-
-  let decompressed: Vec<f32> = decompress(&compressed)?;
-  assert_eq!(decompressed.len(), data.len());
-  for (orig, dec) in data.iter().zip(&decompressed) {
-    assert_eq!(orig.to_bits(), dec.to_bits());
-  }
+  verify_compressed(&data, &compressed)?;
 
   Ok(())
 }
 
 #[test]
-fn test_corrupted_repeat_bitmap_rejected() {
-  use fastalp::{
-    Error, compress, decompress,
-    header::{FLAG_REPEAT, read_header},
-  };
+fn test_corrupted_repeat_bitmap_rejected() -> fastalp::Result<()> {
+  use fastalp::header::{FLAG_REPEAT, read_header};
 
   // 构造带有 FLAG_REPEAT 的合法压缩数据
   let data = vec![1.234f64; 64];
@@ -871,7 +704,7 @@ fn test_corrupted_repeat_bitmap_rejected() {
   if (comp[0] & FLAG_REPEAT) != 0 {
     // 篡改 repeat bitmap 的第 0 位为 1（非法状态，首元素不能是重复元素）
     // 头部为 1B desc + 1B count + 2B params = 4B，随后紧随 bitmap
-    let hdr = read_header(&comp).unwrap();
+    let hdr = read_header(&comp)?;
     comp[hdr.cursor] |= 1;
     let res: fastalp::Result<Vec<f64>> = decompress(&comp);
     assert!(
@@ -879,6 +712,8 @@ fn test_corrupted_repeat_bitmap_rejected() {
       "首位为 1 的恶意或损坏 repeat bitmap 必须被严格拦截并返回 InvalidHeader"
     );
   }
+
+  Ok(())
 }
 
 #[test]
@@ -897,21 +732,13 @@ fn test_for_mode_relaxed_outlier_pruning() -> aok::Result<()> {
 
   // 1. 测试基础 compress 自动剪枝与 100% 比特精确还原
   let compressed = compress(&data);
-  let decompressed: Vec<f64> = decompress(&compressed)?;
-  assert_eq!(decompressed.len(), data.len());
-  for (i, (&orig, &dec)) in data.iter().zip(&decompressed).enumerate() {
-    assert_eq!(orig.to_bits(), dec.to_bits(), "mismatch at index {i}");
-  }
+  verify_compressed(&data, &compressed)?;
 
   // 2. 测试状态化 Encoder 预分配容量复用与无堆重分配
   let mut encoder = Encoder::<f64>::with_capacity(1024);
   let mut comp_buf = Vec::new();
   encoder.compress_into(&data, &mut comp_buf);
-  let dec2: Vec<f64> = decompress(&comp_buf)?;
-  assert_eq!(dec2.len(), data.len());
-  for (i, (&orig, &dec)) in data.iter().zip(&dec2).enumerate() {
-    assert_eq!(orig.to_bits(), dec.to_bits(), "mismatch at index {i}");
-  }
+  verify_compressed(&data, &comp_buf)?;
 
   Ok(())
 }

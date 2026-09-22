@@ -55,6 +55,16 @@ pub struct AlpParams {
   pub use_div: bool,
 }
 
+/// Numerical scaling factors and division configuration for encoding kernels.
+/// 编码内核所需的数值缩放因子与除法配置结构体
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EncodeFactors<F> {
+  pub exp_factor: F,
+  pub fac_int: i64,
+  pub frac_exp: F,
+  pub use_div: bool,
+}
+
 impl AlpParams {
   #[inline(always)]
   pub const fn new(exp: u8, fac: u8, bit_width: u8, use_div: bool) -> Self {

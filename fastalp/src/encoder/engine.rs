@@ -17,7 +17,7 @@ use crate::{
   },
   float::AlpFloat,
   header::{header_len, raw_header_len, write_header},
-  params::AlpParams,
+  params::{AlpParams, EncodeFactors},
   sampler::{BestParams, find_best_params, find_identical_base},
 };
 
@@ -97,35 +97,40 @@ unsafe fn encode_pass<F: AlpFloat>(
   params: BestParams,
   exceptions: &mut Vec<Exception<F::RawBits>>,
 ) -> (F::Int, F::Int) {
-  let exp_factor = F::exp_factor(params.exp, params.fac);
-  let fac_int = F::fac_int(params.fac);
-  let frac_exp = F::frac_exp(params.exp);
-  unsafe {
-    encode_slice(
-      slice,
-      enc_ptr,
-      exp_factor,
-      fac_int,
-      frac_exp,
-      params.use_div,
-      exceptions,
-    )
-  }
+  let factors = EncodeFactors {
+    exp_factor: F::exp_factor(params.exp, params.fac),
+    fac_int: F::fac_int(params.fac),
+    frac_exp: F::frac_exp(params.exp),
+    use_div: params.use_div,
+  };
+  unsafe { encode_slice(slice, enc_ptr, factors, exceptions) }
+}
+
+/// Contextual cache state passed to compress_into_engine.
+/// 传递至 compress_into_engine 的上下文缓存与临时工作区结构体
+pub(crate) struct EngineCache<'a, F: AlpFloat> {
+  pub cached_params: Option<BestParams>,
+  pub cached_target_bw: &'a mut CachedTargetBw,
+  pub cached_use_delta: &'a mut Option<bool>,
+  pub encoded_buf: &'a mut Vec<F::Int>,
+  pub exceptions: &'a mut Vec<Exception<F::RawBits>>,
 }
 
 /// Core compression engine: parameter probing, unrolled encoding, outlier pruning, FOR/Delta scheduling, and RAW fallback.
 /// 核心压缩引擎：执行参数快筛、编码展开、离群值剪枝、FOR/Delta 调度与 RAW 回退保底
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn compress_into_engine<F: AlpFloat>(
   slice: &[F],
   dst: &mut Vec<u8>,
   force_delta: bool,
-  cached_params: Option<BestParams>,
-  cached_target_bw: &mut CachedTargetBw,
-  cached_use_delta: &mut Option<bool>,
-  encoded_buf: &mut Vec<F::Int>,
-  exceptions: &mut Vec<Exception<F::RawBits>>,
+  cache: EngineCache<'_, F>,
 ) -> Option<BestParams> {
+  let EngineCache {
+    cached_params,
+    cached_target_bw,
+    cached_use_delta,
+    encoded_buf,
+    exceptions,
+  } = cache;
   let count = slice.len();
   if count == 0 {
     let raw_hdr = raw_header_len(0);

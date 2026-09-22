@@ -8,6 +8,7 @@ use crate::{
     TYPE_F32_DEC_DELTA, TYPE_F32_DELTA, TYPE_F32_DICT, TYPE_F32_RAW, TYPE_F32_RD,
   },
   encoder::{Exception, kernel::encode_simd_f32},
+  params::EncodeFactors,
 };
 
 impl AlpFloat for f32 {
@@ -58,6 +59,11 @@ impl AlpFloat for f32 {
     // SAFETY: Pre-validated exp <= MAX_EXPONENT_F32 (10), FRAC_ARR_F32 has length 11, bounds checked
     // SAFETY: 调用方已前置校验 exp <= MAX_EXPONENT_F32 (10)，且 FRAC_ARR_F32 长度为 11，exp 必然在 [0, 10] 范围内，索引绝不越界。
     unsafe { *FRAC_ARR_F32.get_unchecked(exp as usize) }
+  }
+
+  #[inline(always)]
+  fn is_nan(self) -> bool {
+    self.is_nan()
   }
 
   #[inline(always)]
@@ -118,18 +124,11 @@ impl AlpFloat for f32 {
   unsafe fn encode_simd(
     slice: &[Self],
     enc_ptr: *mut Self::Int,
-    exp_factor: Self,
-    fac_int: i64,
-    frac_exp: Self,
-    use_div: bool,
+    factors: EncodeFactors<Self>,
     exceptions: &mut Vec<Exception<Self::RawBits>>,
   ) -> (Self::Int, Self::Int) {
     // SAFETY: caller guarantees slice is valid and enc_ptr has space for slice.len()
-    unsafe {
-      encode_simd_f32(
-        slice, enc_ptr, exp_factor, fac_int, frac_exp, use_div, exceptions,
-      )
-    }
+    unsafe { encode_simd_f32(slice, enc_ptr, factors, exceptions) }
   }
 
   #[inline(always)]

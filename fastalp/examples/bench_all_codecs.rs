@@ -23,13 +23,15 @@
 //! Coverage: All 37 standard time-series datasets and microbenchmark scenarios.
 //! 评测指标覆盖全部 37 个公开时序数据集及多种微基准测试场景。
 
+#[path = "common/mod.rs"]
+mod common;
+
 use std::{
-  env::{args, var},
-  fs::{File, create_dir_all, read_dir, write},
+  env::args,
+  fs::{create_dir_all, write},
   hint::black_box,
-  io::{BufRead, BufReader},
   mem::{size_of, size_of_val},
-  path::{Path, PathBuf},
+  path::Path,
   process::exit,
   slice::from_raw_parts,
   time::Instant,
@@ -579,64 +581,16 @@ fn bench_gorilla(data: &[f64]) -> CodecResult {
 }
 
 /// Load standard time-series datasets from disk.
-/// 从磁盘加载全部公开时序测试数据集（严格支持 ALP_DIR 环境变量与相对候选路径）。
+/// 从磁盘加载全部公开时序测试数据集（统一相对路径）。
 fn load_paper_samples() -> Vec<(String, Vec<f64>)> {
-  let alp_dir = var("ALP_DIR")
-    .map(PathBuf::from)
-    .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../ALP"));
-
-  let candidates = [
-    alp_dir.join("data/samples"),
-    PathBuf::from("../ALP/data/samples"),
-    PathBuf::from("../../ALP/data/samples"),
-    PathBuf::from("ALP/data/samples"),
-  ];
-
-  let Some(dir) = candidates.into_iter().find(|p| p.exists()) else {
-    eprintln!(
-      "Error: samples directory not found. Please set ALP_DIR or place ALP repository beside workspace."
-    );
-    exit(1);
-  };
-
-  let mut list = Vec::new();
-  if let Ok(entries) = read_dir(&dir) {
-    let mut paths: Vec<_> = entries.flatten().map(|e| e.path()).collect();
-    paths.sort();
-    for p in paths {
-      if p.extension().is_some_and(|ext| ext == "csv") {
-        let Some(stem) = p.file_stem().and_then(|s| s.to_str()) else {
-          continue;
-        };
-        if let Ok(f) = File::open(&p) {
-          let vals: Vec<f64> = BufReader::new(f)
-            .lines()
-            .map_while(Result::ok)
-            .filter_map(|line| {
-              let s = line.trim();
-              if s.is_empty() || s.starts_with('#') || s.starts_with("column") {
-                None
-              } else {
-                s.parse::<f64>().ok()
-              }
-            })
-            .collect();
-          if !vals.is_empty() {
-            list.push((stem.to_string(), vals));
-          }
-        }
-      }
-    }
-  }
-
+  let list = common::load_paper_samples();
   if list.is_empty() {
     eprintln!(
-      "Error: Found samples dir {:?} but 0 valid CSV datasets.",
-      dir
+      "Error: samples directory not found or empty: {:?}",
+      common::samples_dir()
     );
     exit(1);
   }
-
   list
 }
 
