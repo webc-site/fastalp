@@ -4,8 +4,12 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@1-/mdt": "^0.1.9",
+    "@1-/github_cdn": "^0.1.2",
+    "@1-/mdt": "^0.1.11",
     "@3-/cargo_upgrade": "^0.1.4",
-    "husky": "^9.1.7"
+    "@resvg/resvg-js": "^2.6.2",
+    "husky": "^9.1.7",
+    "svgo": "^4.1.0",
+    "yaml": "^2.9.1"
   }
 }

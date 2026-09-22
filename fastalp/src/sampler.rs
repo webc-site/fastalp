@@ -160,7 +160,9 @@ pub(crate) fn find_best_params<F: AlpFloat>(samples: &[F]) -> BestParams {
               fac: 0,
               use_div: false,
             };
-            if total_cost == 0 || (exceptions == 0 && bit_width <= EARLY_EXIT_BIT_WIDTH) {
+            if total_cost == 0
+              || (exceptions == 0 && (exp == 0 || bit_width <= EARLY_EXIT_BIT_WIDTH))
+            {
               return best_params;
             }
           }

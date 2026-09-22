@@ -1,10 +1,13 @@
 use std::{
   env, fs,
+  hint::black_box,
+  io::{BufRead, BufReader},
   path::{Path, PathBuf},
+  process::exit,
   time::{Duration, Instant},
 };
 
-use fastalp::{ChunkType, Encoder, compress_into, decompress_into};
+use fastalp::{ChunkType, Encoder, compress_into, decompress_into, max_compressed_size};
 use serde::Serialize;
 
 #[inline]
@@ -73,15 +76,18 @@ struct CodecJsonReport {
 }
 
 fn load_csv(path: &Path) -> Vec<f64> {
-  let content = fs::read_to_string(path).expect("Failed to read CSV");
-  content
+  let Ok(f) = fs::File::open(path) else {
+    return Vec::new();
+  };
+  BufReader::new(f)
     .lines()
+    .map_while(Result::ok)
     .filter_map(|line| {
-      let trimmed = line.trim();
-      if trimmed.is_empty() {
+      let s = line.trim();
+      if s.is_empty() || s.starts_with('#') || s.starts_with("column") {
         None
       } else {
-        trimmed.parse::<f64>().ok()
+        s.parse::<f64>().ok()
       }
     })
     .collect()
@@ -89,7 +95,7 @@ fn load_csv(path: &Path) -> Vec<f64> {
 
 fn bench_micro(data: &[f64]) -> MicroBenchmarkResult {
   let iters = 1000;
-  let mut comp_buf = Vec::with_capacity(data.len() * 2 + 64);
+  let mut comp_buf = Vec::with_capacity(max_compressed_size::<f64>(data.len()));
   let mut dec_buf: Vec<f64> = Vec::with_capacity(data.len());
   let mut encoder = Encoder::new();
 
@@ -98,7 +104,7 @@ fn bench_micro(data: &[f64]) -> MicroBenchmarkResult {
     comp_buf.clear();
     encoder.compress_into(data, &mut comp_buf);
     dec_buf.clear();
-    decompress_into(&comp_buf, &mut dec_buf).unwrap();
+    let _ = decompress_into(&comp_buf, &mut dec_buf);
   }
 
   // Sampled
@@ -106,6 +112,7 @@ fn bench_micro(data: &[f64]) -> MicroBenchmarkResult {
   for _ in 0..iters {
     comp_buf.clear();
     compress_into(data, &mut comp_buf);
+    black_box(&comp_buf);
   }
   let enc_sampled_dt = t0.elapsed().as_secs_f64() / iters as f64;
 
@@ -117,6 +124,7 @@ fn bench_micro(data: &[f64]) -> MicroBenchmarkResult {
   for _ in 0..iters {
     comp_buf.clear();
     encoder.compress_into(data, &mut comp_buf);
+    black_box(&comp_buf);
   }
   let enc_kernel_dt = t1.elapsed().as_secs_f64() / iters as f64;
 
@@ -124,7 +132,10 @@ fn bench_micro(data: &[f64]) -> MicroBenchmarkResult {
   let t2 = Instant::now();
   for _ in 0..iters {
     dec_buf.clear();
-    decompress_into(&comp_buf, &mut dec_buf).unwrap();
+    unsafe {
+      decompress_into(&comp_buf, &mut dec_buf).unwrap_unchecked();
+    }
+    black_box(&dec_buf);
   }
   let dec_dt = t2.elapsed().as_secs_f64() / iters as f64;
 
@@ -152,13 +163,39 @@ fn main() {
   let alp_dir = env::var("ALP_DIR")
     .map(PathBuf::from)
     .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../ALP"));
-  let samples_dir = alp_dir.join("data/samples");
-  let mut entries: Vec<_> = fs::read_dir(&samples_dir)
-    .expect("samples dir not found")
+
+  let candidates = [
+    alp_dir.join("data/samples"),
+    PathBuf::from("../ALP/data/samples"),
+    PathBuf::from("../../ALP/data/samples"),
+    PathBuf::from("ALP/data/samples"),
+  ];
+
+  let Some(samples_dir) = candidates.into_iter().find(|p| p.exists()) else {
+    eprintln!(
+      "Error: samples directory not found. Please set ALP_DIR or place ALP repository beside workspace."
+    );
+    exit(1);
+  };
+
+  let Ok(dir_entries) = fs::read_dir(&samples_dir) else {
+    eprintln!("Error: failed to read samples directory: {:?}", samples_dir);
+    exit(1);
+  };
+
+  let mut entries: Vec<_> = dir_entries
     .filter_map(|r| r.ok())
     .filter(|e| e.path().extension().is_some_and(|ext| ext == "csv"))
     .collect();
   entries.sort_by_key(|a| a.file_name());
+
+  if entries.is_empty() {
+    eprintln!(
+      "Error: Found samples dir {:?} but 0 valid CSV datasets.",
+      samples_dir
+    );
+    exit(1);
+  }
 
   println!(
     "Running fastalp benchmark across all {} datasets (fair zero-alloc pipeline)...",
@@ -204,6 +241,7 @@ fn main() {
       for _ in 0..comp_iters {
         comp_buf.clear();
         compress_into(&data, &mut comp_buf);
+        black_box(&comp_buf);
       }
       best_enc_dur = best_enc_dur.min(start_enc.elapsed());
     }
@@ -219,6 +257,7 @@ fn main() {
       for _ in 0..comp_iters {
         comp_buf.clear();
         encoder.compress_into(&data, &mut comp_buf);
+        black_box(&comp_buf);
       }
       best_enc_kern_dur = best_enc_kern_dur.min(start_enc_kern.elapsed());
     }
@@ -232,7 +271,10 @@ fn main() {
       let start_dec = Instant::now();
       for _ in 0..dec_iters {
         dec_buf.clear();
-        let _ = decompress_into::<f64>(&comp_buf, &mut dec_buf);
+        unsafe {
+          decompress_into::<f64>(&comp_buf, &mut dec_buf).unwrap_unchecked();
+        }
+        black_box(&dec_buf);
       }
       best_dec_dur = best_dec_dur.min(start_dec.elapsed());
     }
@@ -313,6 +355,9 @@ fn main() {
   };
 
   let json_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/json/fastalp.json");
+  if let Some(parent) = json_path.parent() {
+    let _ = fs::create_dir_all(parent);
+  }
   let full_json =
     serde_json::to_string_pretty(&report).expect("Failed to serialize fastalp report to JSON");
   fs::write(&json_path, full_json).expect("Failed to write fastalp.json");

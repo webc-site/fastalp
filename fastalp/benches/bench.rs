@@ -2,7 +2,7 @@
 //! fastalp 浮点压缩与解压算法微基准测试套件。
 
 use divan::{Bencher, black_box};
-use fastalp::{Encoder, compress, compress_into, decompress_into};
+use fastalp::{Encoder, compress, compress_into, decompress_into, max_compressed_size};
 
 /// Global high-performance memory allocator (mimalloc).
 /// 全局高性能内存分配器（mimalloc）。
@@ -69,7 +69,7 @@ macro_rules! def_bench {
     #[divan::bench]
     fn $bench_sampled(bencher: Bencher) {
       let data: Vec<$ty> = $expr;
-      let mut dst = Vec::with_capacity(data.len() * 2 + 16);
+      let mut dst = Vec::with_capacity(max_compressed_size::<$ty>(data.len()));
       bencher.bench_local(|| {
         dst.clear();
         compress_into(&data, &mut dst);
@@ -80,7 +80,7 @@ macro_rules! def_bench {
     #[divan::bench]
     fn $bench_cached(bencher: Bencher) {
       let data: Vec<$ty> = $expr;
-      let mut dst = Vec::with_capacity(data.len() * 2 + 16);
+      let mut dst = Vec::with_capacity(max_compressed_size::<$ty>(data.len()));
       let mut encoder = Encoder::new();
       encoder.compress_into(&data, &mut dst);
       bencher.bench_local(|| {
@@ -97,7 +97,10 @@ macro_rules! def_bench {
       let mut dst: Vec<$ty> = Vec::with_capacity($cap);
       bencher.bench_local(|| {
         dst.clear();
-        decompress_into(&compressed, &mut dst).unwrap();
+        // SAFETY: data was compressed successfully by fastalp, decompression is guaranteed to succeed.
+        unsafe {
+          decompress_into(&compressed, &mut dst).unwrap_unchecked();
+        }
         black_box(&dst);
       });
     }
