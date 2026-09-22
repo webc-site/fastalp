@@ -64,7 +64,7 @@ export const DATASET_META = {
   neon_dew_point_temp: { zh: "生态露点温度", en: "Ecology Dew Point", domain: "IoT", domainZh: "生态台网", domainEn: "NEON Geo" },
   neon_pm10_dust: { zh: "生态粉尘微粒", en: "Ecology Aerosol Dust", domain: "IoT", domainZh: "生态台网", domainEn: "NEON Geo" },
   neon_wind_dir: { zh: "生态连续风向", en: "Ecology Wind Dir", domain: "IoT", domainZh: "生态台网", domainEn: "NEON Geo" },
-  scene_sensor: { zh: "十进制物理传感", en: "Industrial IoT Sensor", domain: "IoT", domainZh: "工业微标", domainEn: "Industrial" },
+  isd_air_temperature: { zh: "希思罗逐时气温", en: "ISD Hourly Temp", domain: "IoT", domainZh: "全球气象", domainEn: "Meteorology" },
 
   // 2. Meteorology, Hydrology & Geospatial
   arade4: { zh: "水文河流径流", en: "River Runoff Flow", domain: "气象", domainZh: "水文观测", domainEn: "Hydrology" },
@@ -75,6 +75,7 @@ export const DATASET_META = {
   nyc29: { zh: "出租运营轨迹", en: "NYC Taxi Trajectory", domain: "地理", domainZh: "城市交通", domainEn: "Mobility" },
   poi_lat: { zh: "高精测绘纬度", en: "Geospatial POI Lat", domain: "地理", domainZh: "高精测绘", domainEn: "Geospatial" },
   poi_lon: { zh: "高精测绘经度", en: "Geospatial POI Lon", domain: "地理", domainZh: "高精测绘", domainEn: "Geospatial" },
+  usgs_gage_height: { zh: "密苏里水尺测深", en: "USGS Gage Height", domain: "地理", domainZh: "空间水文", domainEn: "Hydrology" },
 
   // 3. Quantitative Finance & Blockchain
   stocks_usa_c: { zh: "美股纳指高频", en: "Nasdaq Equities HFT", domain: "金融", domainZh: "证券撮合", domainEn: "Securities" },
@@ -83,7 +84,7 @@ export const DATASET_META = {
   bitcoin_f: { zh: "加密现货成交", en: "Crypto Trade Quotes", domain: "金融", domainZh: "加密资产", domainEn: "Crypto" },
   bitcoin_transactions_f: { zh: "链上交易流水", en: "Blockchain Tx Vol", domain: "金融", domainZh: "区块链", domainEn: "Blockchain" },
   food_prices: { zh: "粮农物价指数", en: "FAO Food Price Index", domain: "金融", domainZh: "宏观物价", domainEn: "Economics" },
-  scene_finance: { zh: "量化金融行情", en: "Quantitative Quotes", domain: "金融", domainZh: "量化微标", domainEn: "Fintech" },
+  isd_sea_pressure: { zh: "海平面气压观测", en: "ISD Sea Pressure", domain: "气象", domainZh: "气象观测", domainEn: "Meteorology" },
 
   // 4. Healthcare & Public Health
   cms1: { zh: "门诊医疗结算", en: "Medicare Claims", domain: "医疗", domainZh: "医保结算", domainEn: "Healthcare" },
@@ -98,13 +99,12 @@ export const DATASET_META = {
   gov30: { zh: "宏观运行指标", en: "Macroeconomic Index", domain: "政务", domainZh: "宏观指标", domainEn: "Macro" },
   gov31: { zh: "财政转移支付", en: "Fiscal Transfer", domain: "政务", domainZh: "财政统计", domainEn: "Fiscal" },
   gov40: { zh: "市政管网测绘", en: "Infrastructure Survey", domain: "政务", domainZh: "市政设施", domainEn: "Civic" },
+  noaa_water_sigma: { zh: "基韦斯特潮位差", en: "NOAA Tide Sigma", domain: "海洋", domainZh: "海洋潮汐", domainEn: "Oceanography" },
 
-  // 6. Industrial Waveforms & Hardware
-  scene_ramp: { zh: "单调趋势波形", en: "Monotonic Ramp Wave", domain: "工业", domainZh: "波形趋势", domainEn: "Waveform" },
-  scene_steady: { zh: "稳态常数监控", en: "Steady Heartbeat", domain: "工业", domainZh: "稳态监控", domainEn: "Monitoring" },
+  // 6. Industrial Waveforms & Physical Observations
+  usgs_river_discharge: { zh: "波托马克河水流", en: "USGS Potomac Discharge", domain: "水文", domainZh: "水文河流", domainEn: "Hydrology" },
+  noaa_water_level: { zh: "波士顿水尺水位", en: "NOAA Boston Water Level", domain: "海洋", domainZh: "海洋潮汐", domainEn: "Oceanography" },
   ssd_hdd_benchmarks_f: { zh: "存储设备吞吐", en: "Storage I/O Speed", domain: "工业", domainZh: "硬件指标", domainEn: "Hardware" },
-  scene_geo: { zh: "高精测绘切片", en: "Geospatial Benchmark", domain: "地理", domainZh: "空间遥测", domainEn: "Geospatial" },
-  scene_macro: { zh: "宏观普查切片", en: "Demographics Benchmark", domain: "政务", domainZh: "宏观指标", domainEn: "Macro" },
 };
 
 export const datasetMeta = DATASET_META;
@@ -112,24 +112,24 @@ export const datasetMeta = DATASET_META;
 export const SCENARIO_DATASET_MAP = {
   scene_sensor: [
     "neon_pm10_dust", "neon_air_pressure", "neon_bio_temp_c", "neon_dew_point_temp",
-    "neon_wind_dir", "air_sensor_f", "scene_sensor", "basel_temp_f", "basel_wind_f",
+    "neon_wind_dir", "air_sensor_f", "isd_air_temperature", "basel_temp_f", "basel_wind_f",
     "city_temperature_f", "arade4"
   ],
   scene_finance: [
     "stocks_usa_c", "stocks_de", "stocks_uk", "bitcoin_f",
-    "bitcoin_transactions_f", "food_prices", "scene_finance"
+    "bitcoin_transactions_f", "food_prices", "isd_sea_pressure"
   ],
   scene_geo: [
-    "bird_migration_f", "nyc29", "poi_lat", "poi_lon", "scene_geo"
+    "bird_migration_f", "nyc29", "poi_lat", "poi_lon", "usgs_gage_height"
   ],
   scene_health: [
     "cms1", "cms25", "cms9", "medicare1", "medicare9"
   ],
   scene_macro: [
-    "gov10", "gov26", "gov30", "gov31", "gov40", "scene_macro"
+    "gov10", "gov26", "gov30", "gov31", "gov40", "noaa_water_sigma"
   ],
   scene_waveform: [
-    "scene_ramp", "scene_steady", "ssd_hdd_benchmarks_f"
+    "usgs_river_discharge", "noaa_water_level", "ssd_hdd_benchmarks_f"
   ]
 };
 
@@ -257,7 +257,9 @@ export const loadBenchData = async () => {
     decSpeedupVsZstd: speedupDec(zstd),
     decSpeedupVsGorilla: speedupDec(gorilla),
     decSpeedupVsChimp: speedupDec(chimp),
-    rampRatioFastalp: fastalp.paper_31.datasets.find((d) => d.name === "scene_ramp").ratio.toFixed(1),
+    rampRatioFastalp: (
+      fastalp.paper_31.datasets.find((d) => d.name === "usgs_river_discharge")?.ratio ?? 1.0
+    ).toFixed(1),
     spaceSavedVsCppPct: (
       ((cpp_alp.paper_31.total_compressed_bytes - fastalp.paper_31.total_compressed_bytes) /
         cpp_alp.paper_31.total_compressed_bytes) *

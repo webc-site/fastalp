@@ -52,9 +52,9 @@ export const loadCppAlpResult = async () => {
   }
 
   const n = dataset_li.length,
-    sensor_sc = dataset_li.find((d) => d.name === "scene_sensor"),
-    ramp_sc = dataset_li.find((d) => d.name === "scene_ramp"),
-    steady_sc = dataset_li.find((d) => d.name === "scene_steady");
+    sensor_sc = dataset_li.find((d) => d.name === "isd_air_temperature" || d.name === "scene_sensor"),
+    ramp_sc = dataset_li.find((d) => d.name === "usgs_river_discharge" || d.name === "scene_ramp"),
+    steady_sc = dataset_li.find((d) => d.name === "noaa_water_sigma" || d.name === "scene_steady");
 
   const result_obj = {
     algorithm: "cpp_alp",

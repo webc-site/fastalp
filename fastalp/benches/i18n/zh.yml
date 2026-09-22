@@ -58,7 +58,7 @@ type_specialized: "浮点压缩"
 type_general: "通用字节"
 
 scene_sensor_title: "十进制环境与气象水文传感"
-scene_sensor_sub: "来源: NEON生态台网 / Meteoblue气象 / CWI水文"
+scene_sensor_sub: "来源: NEON生态台网 / Meteoblue气象 / CWI水文 / NOAA气象"
 scene_sensor_badge: "11 组数据 · 11,264 点"
 
 scene_finance_title: "高频量化金融交易与资产行情"
@@ -66,7 +66,7 @@ scene_finance_sub: "来源: 纳指/伦交所/德交所 / Zenodo量化 / 粮农�
 scene_finance_badge: "7 组数据 · 7,168 点"
 
 scene_geo_title: "地理空间测绘与高精轨迹跟踪"
-scene_geo_sub: "来源: 候鸟空间遥测 / Kaggle POI / 纽约出租轨迹"
+scene_geo_sub: "来源: 候鸟空间遥测 / Kaggle POI / 纽约出租 / USGS水文"
 scene_geo_badge: "5 组数据 · 5,120 点"
 
 scene_health_title: "医疗社保理赔与公共卫生处方"
@@ -77,8 +77,8 @@ scene_macro_title: "公共政务民生与宏观统计普查"
 scene_macro_sub: "来源: 财政转移支付 / 人口普查常数 / 宏观运行指标"
 scene_macro_badge: "6 组数据 · 6,144 点"
 
-scene_waveform_title: "物理单调波形、设备指标与稳态流"
-scene_waveform_sub: "来源: 工业PID单调波形 / 固态存储I/O / 稳态心跳流"
+scene_waveform_title: "物理连续波形与海洋水文观测"
+scene_waveform_sub: "来源: USGS河流流量 / NOAA水文潮位 / 固态存储I/O"
 scene_waveform_badge: "3 组数据 · 3,072 点"
 
 sc_col_algo: "算法名称"
@@ -87,8 +87,8 @@ sc_col_enc: "压缩吞吐"
 sc_col_ratio: "压缩率"
 
 footer_lines:
-  - "实测备注：综合解压吞吐量、压缩吞吐量与压缩率均采用 37 项公开测试集与工业场景的几何平均值。"
-  - "在 {cpu} 实机与评测代码库 github.com/x-at-01/ALP 同机全量实测。"
+  - "实测备注：综合解压吞吐量、压缩吞吐量与压缩率均采用 37 项公开测试集与典型场景的几何平均值。"
+  - "在 {cpu} 实机与评测代码库 github.com/cwida/ALP 官方基准同机全量实测。"
   - "保证 IEEE 754 浮点二进制精确无损。"
-footer_left: "实测备注：综合解压吞吐量、压缩吞吐量与压缩率均采用 37 项公开测试集与工业场景的几何平均值。在 {cpu} 实机与评测代码库 github.com/x-at-01/ALP 同机全量实测。保证 IEEE 754 浮点二进制精确无损。"
+footer_left: "实测备注：综合解压吞吐量、压缩吞吐量与压缩率均采用 37 项公开测试集与典型场景的几何平均值。在 {cpu} 实机与评测代码库 github.com/cwida/ALP 官方基准同机全量实测。保证 IEEE 754 浮点二进制精确无损。"
 footer_right: "开源实现 fastalp @ crates.io/crates/fastalp"

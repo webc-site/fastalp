@@ -567,7 +567,7 @@ fn test_exposed_utilities() -> aok::Result<()> {
 fn test_dictionary_mode_roundtrip() -> fastalp::Result<()> {
   use fastalp::header::{TYPE_F64_DICT, read_header};
 
-  // 1. 20 个离散值随机分布（模拟 scene_macro），验证字典压缩模式与完全无损解压
+  // 1. 20 个离散值随机分布（模拟低基数离散值时序），验证字典压缩模式与完全无损解压
   let dict_vals = [
     1250.0f64, 1265.5, 1281.0, 1296.5, 1312.0, 1327.5, 1343.0, 1358.5, 1374.0, 1389.5, 1405.0,
     1420.5, 1436.0, 1451.5, 1467.0, 1482.5, 1498.0, 1513.5, 1529.0, 1544.5,

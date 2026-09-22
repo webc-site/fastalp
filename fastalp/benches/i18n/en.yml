@@ -58,7 +58,7 @@ type_specialized: "Float Comp"
 type_general: "General Bytes"
 
 scene_sensor_title: "Decimal Environmental & Hydrology IoT"
-scene_sensor_sub: "Source: NEON Network / Meteoblue / CWI Hydrology"
+scene_sensor_sub: "Source: NEON Network / Meteoblue / CWI Hydrology / NOAA ISD"
 scene_sensor_badge: "11 Series · 11,264 pts"
 
 scene_finance_title: "High-Frequency Quantitative Trades"
@@ -66,7 +66,7 @@ scene_finance_sub: "Source: Nasdaq / LSE / DAX / Zenodo / FAO"
 scene_finance_badge: "7 Series · 7,168 pts"
 
 scene_geo_title: "Geospatial Mapping & GPS Trajectories"
-scene_geo_sub: "Source: Avian Telemetry / Kaggle POI / NYC Taxi"
+scene_geo_sub: "Source: Avian Telemetry / Kaggle POI / NYC Taxi / USGS NWIS"
 scene_geo_badge: "5 Series · 5,120 pts"
 
 scene_health_title: "Healthcare Billing & Prescription Claims"
@@ -77,8 +77,8 @@ scene_macro_title: "Civic Demographics & Macroeconomics"
 scene_macro_sub: "Source: Fiscal Transfers / Demographics / Macro Index"
 scene_macro_badge: "6 Series · 6,144 pts"
 
-scene_waveform_title: "Physical Waveforms & Steady Monitors"
-scene_waveform_sub: "Source: Industrial PID Ramp / SSD I/O / Steady Flow"
+scene_waveform_title: "Continuous Physical & Hydrology Streams"
+scene_waveform_sub: "Source: USGS River Discharge / NOAA Water Level / Storage I/O"
 scene_waveform_badge: "3 Series · 3,072 pts"
 
 sc_col_algo: "Algorithm"
@@ -88,8 +88,8 @@ sc_col_ratio: "Ratio"
 
 footer_lines:
   - "Note: Overall decode/encode throughput and compression ratios are calculated using"
-  - "Geometric Mean across all 37 public benchmarks and typical industrial scenarios."
-  - "Measured directly on {cpu} with C++ ALP Fork (github.com/x-at-01/ALP) end-to-end."
+  - "Geometric Mean across all 37 public benchmarks and representative observation scenarios."
+  - "Measured directly on {cpu} with official C++ ALP (github.com/cwida/ALP) benchmark harness."
   - "Exact IEEE 754 bitwise lossless floating-point precision guaranteed."
-footer_left: "Note: Overall throughput and compression ratios use Geometric Mean across 37 benchmarks. Measured on {cpu} with C++ ALP Fork."
+footer_left: "Note: Overall throughput and compression ratios use Geometric Mean across 37 benchmarks. Measured on {cpu} with C++ ALP."
 footer_right: "Open-source fastalp @ crates.io/crates/fastalp"

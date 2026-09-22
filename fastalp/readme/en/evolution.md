@@ -13,9 +13,6 @@
 - **FOR Frame-of-Reference Subtraction**:
   Subtracts the frame-wide minimum value to shift signed ranges into compact non-negative domains, reducing encoded bit-widths.
 
-- **Stateful Encoder & Parameter Caching**:
-  Enables caching of derived `(exp, fac)` models across consecutive 1024-element blocks in continuous streams, boosting steady-state throughput from `4-5 GB/s` to `15-24+ GB/s`.
-
 ---
 
 ### Proprietary Algorithmic & Performance Breakthroughs

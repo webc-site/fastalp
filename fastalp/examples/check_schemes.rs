@@ -6,10 +6,10 @@ use fastalp::Encoder;
 fn main() {
   let test_cases = [
     "gov26",
-    "scene_ramp",
-    "scene_sensor",
-    "scene_geo",
-    "scene_steady",
+    "usgs_river_discharge",
+    "isd_air_temperature",
+    "usgs_gage_height",
+    "noaa_water_level",
   ];
   let mut enc = Encoder::<f64>::with_capacity(1024);
   let mut dst = Vec::new();
