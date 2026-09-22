@@ -102,9 +102,9 @@ macro_rules! define_fearless_kernel {
       let min_v = min_v0.min(min_v1);
       let max_v = max_v0.max(max_v1);
 
-      let mut min_arr = [0.0 as $F; 64];
-      let mut max_arr = [0.0 as $F; 64];
-      let mut diff_arr = [0 as $U; 64];
+      let mut min_arr = [0.0 as $F; 16];
+      let mut max_arr = [0.0 as $F; 16];
+      let mut diff_arr = [0 as $U; 16];
       min_v.store_slice(&mut min_arr[..n]);
       max_v.store_slice(&mut max_arr[..n]);
       any_diff_v.store_slice(&mut diff_arr[..n]);

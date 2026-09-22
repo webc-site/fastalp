@@ -79,122 +79,64 @@ macro_rules! write_8 {
   }};
 }
 
+/// Unrolls a block 4 times with `$idx` bound to 0..4.
+/// 将逻辑按索引 0..4 重复展开 4 次顺序执行
+#[macro_export]
+macro_rules! unroll_4 {
+  ($idx:ident => $expr:expr) => {{
+    let $idx = 0;
+    $expr;
+    let $idx = 1;
+    $expr;
+    let $idx = 2;
+    $expr;
+    let $idx = 3;
+    $expr;
+  }};
+}
+
 /// Writes 4 evaluated elements to consecutive raw pointer memory `*($dst).add(k) = expr(k)`.
 /// 向连续裸指针内存顺序写入 4 个计算结果（局部绑定 base 指针）
 #[macro_export]
 macro_rules! write_4 {
   ($dst:expr, $idx:ident => $expr:expr) => {{
     let dst = $dst;
-    let $idx = 0;
-    *dst.add($idx) = $expr;
-    let $idx = 1;
-    *dst.add($idx) = $expr;
-    let $idx = 2;
-    *dst.add($idx) = $expr;
-    let $idx = 3;
-    *dst.add($idx) = $expr;
+    $crate::unroll_4!($idx => {
+      *dst.add($idx) = $expr;
+    });
   }};
 }
 
-/// Dispatches bit-width 1..=20, 24, 28, 32 to monomorphized chunk packing function.
-/// 统一分发 1..=20, 24, 28, 32 位宽至单态化 8 元素块打包内核
+/// Generic case generator for monomorphized bit-width dispatches.
+/// 编译期单态化分发通用模式生成宏（避免手动手写 30+ 冗余分支）
 #[macro_export]
-macro_rules! match_pack_23 {
-  ($bw:expr, fallback => $fallback:expr, |$w:ident| $arm:expr) => {
+macro_rules! match_pack_cases {
+  ($bw:expr, fallback => $fallback:expr, |$w:ident| $arm:expr, [$($val:literal),* $(,)?]) => {
     match $bw {
-      1 => {
-        const $w: u8 = 1;
-        $arm
-      }
-      2 => {
-        const $w: u8 = 2;
-        $arm
-      }
-      3 => {
-        const $w: u8 = 3;
-        $arm
-      }
-      4 => {
-        const $w: u8 = 4;
-        $arm
-      }
-      5 => {
-        const $w: u8 = 5;
-        $arm
-      }
-      6 => {
-        const $w: u8 = 6;
-        $arm
-      }
-      7 => {
-        const $w: u8 = 7;
-        $arm
-      }
-      8 => {
-        const $w: u8 = 8;
-        $arm
-      }
-      9 => {
-        const $w: u8 = 9;
-        $arm
-      }
-      10 => {
-        const $w: u8 = 10;
-        $arm
-      }
-      11 => {
-        const $w: u8 = 11;
-        $arm
-      }
-      12 => {
-        const $w: u8 = 12;
-        $arm
-      }
-      13 => {
-        const $w: u8 = 13;
-        $arm
-      }
-      14 => {
-        const $w: u8 = 14;
-        $arm
-      }
-      15 => {
-        const $w: u8 = 15;
-        $arm
-      }
-      16 => {
-        const $w: u8 = 16;
-        $arm
-      }
-      17 => {
-        const $w: u8 = 17;
-        $arm
-      }
-      18 => {
-        const $w: u8 = 18;
-        $arm
-      }
-      19 => {
-        const $w: u8 = 19;
-        $arm
-      }
-      20 => {
-        const $w: u8 = 20;
-        $arm
-      }
-      24 => {
-        const $w: u8 = 24;
-        $arm
-      }
-      28 => {
-        const $w: u8 = 28;
-        $arm
-      }
-      32 => {
-        const $w: u8 = 32;
-        $arm
-      }
+      $(
+        $val => {
+          const $w: u8 = $val;
+          $arm
+        }
+      )*
       _ => $fallback,
     }
+  };
+}
+
+/// Dispatches bit-width 1..=32 to monomorphized chunk packing function.
+/// 统一分发 1..=32 位宽至单态化 8 元素块打包内核（宏元编程展开，零重复代码）
+#[macro_export]
+macro_rules! match_pack_32 {
+  ($bw:expr, fallback => $fallback:expr, |$w:ident| $arm:expr) => {
+    $crate::match_pack_cases!(
+      $bw,
+      fallback => $fallback,
+      |$w| $arm,
+      [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+        17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32
+      ]
+    )
   };
 }
