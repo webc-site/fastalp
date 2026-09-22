@@ -62,353 +62,125 @@ fn generate_random_data(count: usize) -> Vec<f64> {
     .collect()
 }
 
-// ───────────────────────────────────────────────
-// 1. f64 compression & decompression benchmarks (1024 floats, standard vector size)
-// 1. f64 压缩与解压基准测试（1024 浮点数，标准向量大小）
-// ───────────────────────────────────────────────
+/// Macro defining sampled compression, cached compression, and decompression benchmarks.
+/// 宏定义冷启动动态参数采样压缩、热状态内核参数复用压缩与解压基准测试三联组。
+macro_rules! def_bench {
+  ($bench_sampled:ident, $bench_cached:ident, $bench_dec:ident, $ty:ty, $expr:expr, $cap:expr) => {
+    #[divan::bench]
+    fn $bench_sampled(bencher: Bencher) {
+      let data: Vec<$ty> = $expr;
+      let mut dst = Vec::with_capacity(data.len() * 2 + 16);
+      bencher.bench_local(|| {
+        dst.clear();
+        compress_into(&data, &mut dst);
+        black_box(&dst);
+      });
+    }
 
-/// Benchmark f64 sensor decimal data compression with dynamic parameter sampling (cold mode).
-/// 评测 f64 传感器十进制小数数据动态参数采样压缩（冷启动模式）。
-#[divan::bench]
-fn bench_compress_f64_sensor_sampled_1024(bencher: Bencher) {
-  let data = generate_sensor_data(BLOCK_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  bencher.bench_local(|| {
-    dst.clear();
-    compress_into(&data, &mut dst);
-    black_box(&dst);
-  });
-}
+    #[divan::bench]
+    fn $bench_cached(bencher: Bencher) {
+      let data: Vec<$ty> = $expr;
+      let mut dst = Vec::with_capacity(data.len() * 2 + 16);
+      let mut encoder = Encoder::new();
+      encoder.compress_into(&data, &mut dst);
+      bencher.bench_local(|| {
+        dst.clear();
+        encoder.compress_into(&data, &mut dst);
+        black_box(&dst);
+      });
+    }
 
-/// Benchmark f64 sensor decimal data compression with cached parameters (warm kernel mode).
-/// 评测 f64 传感器十进制小数数据复用已缓存参数压缩（热状态纯内核模式）。
-#[divan::bench]
-fn bench_compress_f64_sensor_cached_1024(bencher: Bencher) {
-  let data = generate_sensor_data(BLOCK_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  let mut encoder = Encoder::new();
-  encoder.compress_into(&data, &mut dst);
-  bencher.bench_local(|| {
-    dst.clear();
-    encoder.compress_into(&data, &mut dst);
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f64 sensor decimal data decompression throughput.
-/// 评测 f64 传感器十进制小数数据解压吞吐率。
-#[divan::bench]
-fn bench_decompress_f64_sensor_1024(bencher: Bencher) {
-  let data = generate_sensor_data(BLOCK_SIZE);
-  let compressed = compress(&data[..]);
-  let mut dst: Vec<f64> = Vec::with_capacity(BLOCK_SIZE);
-  bencher.bench_local(|| {
-    dst.clear();
-    decompress_into(&compressed, &mut dst).unwrap();
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f64 ramp linear data compression with dynamic parameter sampling (cold mode).
-/// 评测 f64 线性递增数据动态参数采样压缩（冷启动模式）。
-#[divan::bench]
-fn bench_compress_f64_ramp_sampled_1024(bencher: Bencher) {
-  let data = generate_ramp_data(BLOCK_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  bencher.bench_local(|| {
-    dst.clear();
-    compress_into(&data[..], &mut dst);
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f64 ramp linear data compression with cached parameters (warm kernel mode).
-/// 评测 f64 线性递增数据复用已缓存参数压缩（热状态纯内核模式）。
-#[divan::bench]
-fn bench_compress_f64_ramp_cached_1024(bencher: Bencher) {
-  let data = generate_ramp_data(BLOCK_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  let mut encoder = Encoder::new();
-  encoder.compress_into(&data, &mut dst);
-  bencher.bench_local(|| {
-    dst.clear();
-    encoder.compress_into(&data, &mut dst);
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f64 ramp linear data decompression throughput.
-/// 评测 f64 线性递增数据解压吞吐率。
-#[divan::bench]
-fn bench_decompress_f64_ramp_1024(bencher: Bencher) {
-  let data = generate_ramp_data(BLOCK_SIZE);
-  let compressed = compress(&data[..]);
-  let mut dst: Vec<f64> = Vec::with_capacity(BLOCK_SIZE);
-  bencher.bench_local(|| {
-    dst.clear();
-    decompress_into(&compressed, &mut dst).unwrap();
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f64 random noise data compression with dynamic parameter sampling (cold mode).
-/// 评测 f64 随机噪声数据动态参数采样压缩（冷启动模式）。
-#[divan::bench]
-fn bench_compress_f64_random_sampled_1024(bencher: Bencher) {
-  let data = generate_random_data(BLOCK_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  bencher.bench_local(|| {
-    dst.clear();
-    compress_into(&data[..], &mut dst);
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f64 random noise data compression with cached parameters (warm kernel mode).
-/// 评测 f64 随机噪声数据复用已缓存参数压缩（热状态纯内核模式）。
-#[divan::bench]
-fn bench_compress_f64_random_cached_1024(bencher: Bencher) {
-  let data = generate_random_data(BLOCK_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  let mut encoder = Encoder::new();
-  encoder.compress_into(&data, &mut dst);
-  bencher.bench_local(|| {
-    dst.clear();
-    encoder.compress_into(&data, &mut dst);
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f64 random noise data decompression throughput.
-/// 评测 f64 随机噪声数据解压吞吐率。
-#[divan::bench]
-fn bench_decompress_f64_random_1024(bencher: Bencher) {
-  let data = generate_random_data(BLOCK_SIZE);
-  let compressed = compress(&data[..]);
-  let mut dst: Vec<f64> = Vec::with_capacity(BLOCK_SIZE);
-  bencher.bench_local(|| {
-    dst.clear();
-    decompress_into(&compressed, &mut dst).unwrap();
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f64 identical constant data compression with dynamic parameter sampling (cold mode).
-/// 评测 f64 完全相同常量数据动态参数采样压缩（冷启动模式）。
-#[divan::bench]
-fn bench_compress_f64_identical_sampled_1024(bencher: Bencher) {
-  let data = vec![98.6f64; BLOCK_SIZE];
-  let mut dst = Vec::with_capacity(64);
-  bencher.bench_local(|| {
-    dst.clear();
-    compress_into(&data[..], &mut dst);
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f64 identical constant data compression with cached parameters (warm kernel mode).
-/// 评测 f64 完全相同常量数据复用已缓存参数压缩（热状态纯内核模式）。
-#[divan::bench]
-fn bench_compress_f64_identical_cached_1024(bencher: Bencher) {
-  let data = vec![98.6f64; BLOCK_SIZE];
-  let mut dst = Vec::with_capacity(64);
-  let mut encoder = Encoder::new();
-  encoder.compress_into(&data, &mut dst);
-  bencher.bench_local(|| {
-    dst.clear();
-    encoder.compress_into(&data, &mut dst);
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f64 identical constant data decompression throughput.
-/// 评测 f64 完全相同常量数据解压吞吐率。
-#[divan::bench]
-fn bench_decompress_f64_identical_1024(bencher: Bencher) {
-  let data = vec![98.6f64; BLOCK_SIZE];
-  let compressed = compress(&data[..]);
-  let mut dst: Vec<f64> = Vec::with_capacity(BLOCK_SIZE);
-  bencher.bench_local(|| {
-    dst.clear();
-    decompress_into(&compressed, &mut dst).unwrap();
-    black_box(&dst);
-  });
+    #[divan::bench]
+    fn $bench_dec(bencher: Bencher) {
+      let data: Vec<$ty> = $expr;
+      let compressed = compress(&data[..]);
+      let mut dst: Vec<$ty> = Vec::with_capacity($cap);
+      bencher.bench_local(|| {
+        dst.clear();
+        decompress_into(&compressed, &mut dst).unwrap();
+        black_box(&dst);
+      });
+    }
+  };
 }
 
 // ───────────────────────────────────────────────
-// 2. f32 compression & decompression benchmarks (1024 floats)
-// 2. f32 压缩与解压基准测试（1024 浮点数）
+// 1. f64 1024 浮点基准测试
 // ───────────────────────────────────────────────
+def_bench!(
+  bench_compress_f64_sensor_sampled_1024,
+  bench_compress_f64_sensor_cached_1024,
+  bench_decompress_f64_sensor_1024,
+  f64,
+  generate_sensor_data(BLOCK_SIZE),
+  BLOCK_SIZE
+);
 
-/// Benchmark f32 sensor decimal data compression with dynamic parameter sampling (cold mode).
-/// 评测 f32 传感器十进制小数数据动态参数采样压缩（冷启动模式）。
-#[divan::bench]
-fn bench_compress_f32_sensor_sampled_1024(bencher: Bencher) {
-  let data = generate_sensor_data_f32(BLOCK_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  bencher.bench_local(|| {
-    dst.clear();
-    compress_into(&data[..], &mut dst);
-    black_box(&dst);
-  });
-}
+def_bench!(
+  bench_compress_f64_ramp_sampled_1024,
+  bench_compress_f64_ramp_cached_1024,
+  bench_decompress_f64_ramp_1024,
+  f64,
+  generate_ramp_data(BLOCK_SIZE),
+  BLOCK_SIZE
+);
 
-/// Benchmark f32 sensor decimal data compression with cached parameters (warm kernel mode).
-/// 评测 f32 传感器十进制小数数据复用已缓存参数压缩（热状态纯内核模式）。
-#[divan::bench]
-fn bench_compress_f32_sensor_cached_1024(bencher: Bencher) {
-  let data = generate_sensor_data_f32(BLOCK_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  let mut encoder = Encoder::new();
-  encoder.compress_into(&data, &mut dst);
-  bencher.bench_local(|| {
-    dst.clear();
-    encoder.compress_into(&data, &mut dst);
-    black_box(&dst);
-  });
-}
+def_bench!(
+  bench_compress_f64_random_sampled_1024,
+  bench_compress_f64_random_cached_1024,
+  bench_decompress_f64_random_1024,
+  f64,
+  generate_random_data(BLOCK_SIZE),
+  BLOCK_SIZE
+);
 
-/// Benchmark f32 sensor decimal data decompression throughput.
-/// 评测 f32 传感器十进制小数数据解压吞吐率。
-#[divan::bench]
-fn bench_decompress_f32_sensor_1024(bencher: Bencher) {
-  let data = generate_sensor_data_f32(BLOCK_SIZE);
-  let compressed = compress(&data[..]);
-  let mut dst: Vec<f32> = Vec::with_capacity(BLOCK_SIZE);
-  bencher.bench_local(|| {
-    dst.clear();
-    decompress_into(&compressed, &mut dst).unwrap();
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f32 ramp linear data compression with dynamic parameter sampling (cold mode).
-/// 评测 f32 线性递增数据动态参数采样压缩（冷启动模式）。
-#[divan::bench]
-fn bench_compress_f32_ramp_sampled_1024(bencher: Bencher) {
-  let data = generate_ramp_data_f32(BLOCK_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  bencher.bench_local(|| {
-    dst.clear();
-    compress_into(&data[..], &mut dst);
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f32 ramp linear data compression with cached parameters (warm kernel mode).
-/// 评测 f32 线性递增数据复用已缓存参数压缩（热状态纯内核模式）。
-#[divan::bench]
-fn bench_compress_f32_ramp_cached_1024(bencher: Bencher) {
-  let data = generate_ramp_data_f32(BLOCK_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  let mut encoder = Encoder::new();
-  encoder.compress_into(&data, &mut dst);
-  bencher.bench_local(|| {
-    dst.clear();
-    encoder.compress_into(&data, &mut dst);
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f32 ramp linear data decompression throughput.
-/// 评测 f32 线性递增数据解压吞吐率。
-#[divan::bench]
-fn bench_decompress_f32_ramp_1024(bencher: Bencher) {
-  let data = generate_ramp_data_f32(BLOCK_SIZE);
-  let compressed = compress(&data[..]);
-  let mut dst: Vec<f32> = Vec::with_capacity(BLOCK_SIZE);
-  bencher.bench_local(|| {
-    dst.clear();
-    decompress_into(&compressed, &mut dst).unwrap();
-    black_box(&dst);
-  });
-}
+def_bench!(
+  bench_compress_f64_identical_sampled_1024,
+  bench_compress_f64_identical_cached_1024,
+  bench_decompress_f64_identical_1024,
+  f64,
+  vec![98.6f64; BLOCK_SIZE],
+  BLOCK_SIZE
+);
 
 // ───────────────────────────────────────────────
-// 3. Large batch throughput benchmarks (65536 floats, f64 512 KB, f32 256 KB)
-// 3. 大块批量压缩与解压吞吐测试（65536 浮点数，f64 为 512 KB，f32 为 256 KB）
+// 2. f32 1024 浮点基准测试
 // ───────────────────────────────────────────────
+def_bench!(
+  bench_compress_f32_sensor_sampled_1024,
+  bench_compress_f32_sensor_cached_1024,
+  bench_decompress_f32_sensor_1024,
+  f32,
+  generate_sensor_data_f32(BLOCK_SIZE),
+  BLOCK_SIZE
+);
 
-/// Benchmark f64 large batch data compression with dynamic parameter sampling (cold mode).
-/// 评测 f64 大批量数据动态参数采样压缩（冷启动模式）。
-#[divan::bench]
-fn bench_compress_f64_large_batch_sampled(bencher: Bencher) {
-  let data = generate_sensor_data(LARGE_BATCH_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  bencher.bench_local(|| {
-    dst.clear();
-    compress_into(&data[..], &mut dst);
-    black_box(&dst);
-  });
-}
+def_bench!(
+  bench_compress_f32_ramp_sampled_1024,
+  bench_compress_f32_ramp_cached_1024,
+  bench_decompress_f32_ramp_1024,
+  f32,
+  generate_ramp_data_f32(BLOCK_SIZE),
+  BLOCK_SIZE
+);
 
-/// Benchmark f64 large batch data compression with cached parameters (warm kernel mode).
-/// 评测 f64 大批量数据复用已缓存参数压缩（热状态纯内核模式）。
-#[divan::bench]
-fn bench_compress_f64_large_batch_cached(bencher: Bencher) {
-  let data = generate_sensor_data(LARGE_BATCH_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  let mut encoder = Encoder::new();
-  encoder.compress_into(&data, &mut dst);
-  bencher.bench_local(|| {
-    dst.clear();
-    encoder.compress_into(&data, &mut dst);
-    black_box(&dst);
-  });
-}
+// ───────────────────────────────────────────────
+// 3. 大块批量吞吐基准测试 (65536 浮点数)
+// ───────────────────────────────────────────────
+def_bench!(
+  bench_compress_f64_large_batch_sampled,
+  bench_compress_f64_large_batch_cached,
+  bench_decompress_f64_large_batch,
+  f64,
+  generate_sensor_data(LARGE_BATCH_SIZE),
+  LARGE_BATCH_SIZE
+);
 
-/// Benchmark f64 large batch data decompression throughput.
-/// 评测 f64 大批量数据解压吞吐率。
-#[divan::bench]
-fn bench_decompress_f64_large_batch(bencher: Bencher) {
-  let data = generate_sensor_data(LARGE_BATCH_SIZE);
-  let compressed = compress(&data[..]);
-  let mut dst: Vec<f64> = Vec::with_capacity(LARGE_BATCH_SIZE);
-  bencher.bench_local(|| {
-    dst.clear();
-    decompress_into(&compressed, &mut dst).unwrap();
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f32 large batch data compression with dynamic parameter sampling (cold mode).
-/// 评测 f32 大批量数据动态参数采样压缩（冷启动模式）。
-#[divan::bench]
-fn bench_compress_f32_large_batch_sampled(bencher: Bencher) {
-  let data = generate_sensor_data_f32(LARGE_BATCH_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  bencher.bench_local(|| {
-    dst.clear();
-    compress_into(&data[..], &mut dst);
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f32 large batch data compression with cached parameters (warm kernel mode).
-/// 评测 f32 大批量数据复用已缓存参数压缩（热状态纯内核模式）。
-#[divan::bench]
-fn bench_compress_f32_large_batch_cached(bencher: Bencher) {
-  let data = generate_sensor_data_f32(LARGE_BATCH_SIZE);
-  let mut dst = Vec::with_capacity(data.len() * 2 + 16);
-  let mut encoder = Encoder::new();
-  encoder.compress_into(&data, &mut dst);
-  bencher.bench_local(|| {
-    dst.clear();
-    encoder.compress_into(&data, &mut dst);
-    black_box(&dst);
-  });
-}
-
-/// Benchmark f32 large batch data decompression throughput.
-/// 评测 f32 大批量数据解压吞吐率。
-#[divan::bench]
-fn bench_decompress_f32_large_batch(bencher: Bencher) {
-  let data = generate_sensor_data_f32(LARGE_BATCH_SIZE);
-  let compressed = compress(&data[..]);
-  let mut dst: Vec<f32> = Vec::with_capacity(LARGE_BATCH_SIZE);
-  bencher.bench_local(|| {
-    dst.clear();
-    decompress_into(&compressed, &mut dst).unwrap();
-    black_box(&dst);
-  });
-}
+def_bench!(
+  bench_compress_f32_large_batch_sampled,
+  bench_compress_f32_large_batch_cached,
+  bench_decompress_f32_large_batch,
+  f32,
+  generate_sensor_data_f32(LARGE_BATCH_SIZE),
+  LARGE_BATCH_SIZE
+);

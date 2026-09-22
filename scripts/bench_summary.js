@@ -1,19 +1,18 @@
 #!/usr/bin/env node
 import fs from "node:fs";
-import path from "node:path";
 
-const inputFile = process.argv[2] || "bench_raw.txt";
-const outputJsonFile = process.argv[3] || "bench_output.json";
-const outputMdFile = process.argv[4] || "bench_summary.md";
+const input_file = process.argv[2] || "bench_raw.txt",
+  output_json_file = process.argv[3] || "bench_output.json",
+  output_md_file = process.argv[4] || "bench_summary.md";
 
-if (!fs.existsSync(inputFile)) {
-  console.error(`Input file ${inputFile} does not exist`);
+if (!fs.existsSync(input_file)) {
+  console.error(`Input file ${input_file} does not exist`);
   process.exit(1);
 }
 
-const rawText = fs.readFileSync(inputFile, "utf8");
+const raw_text = fs.readFileSync(input_file, "utf8").replaceAll(/\x1b\[[0-9;]*m/g, "");
 
-const unitMap = {
+const unit_map = {
   ns: 1,
   "µs": 1e3,
   us: 1e3,
@@ -21,85 +20,83 @@ const unitMap = {
   s: 1e9,
 };
 
-function getBytes(name) {
-  const isF32 = name.includes("f32");
-  const elemBytes = isF32 ? 4 : 8;
+const byteCount = (name) => {
+  const is_f32 = name.includes("f32"),
+    elem_bytes = is_f32 ? 4 : 8;
   if (name.includes("large_batch")) {
-    return 65536 * elemBytes;
+    return 65536 * elem_bytes;
   }
-  return 1024 * elemBytes;
-}
+  return 1024 * elem_bytes;
+};
 
-const items = [];
-const lines = rawText.split("\n");
+const item_li = [],
+  line_li = raw_text.split("\n");
 
-for (const line of lines) {
+for (const line of line_li) {
   const m = line.match(
     /[├╰]─\s+([^\s]+)\s+([0-9.]+)\s+([^\s]+)\s+│\s+([0-9.]+)\s+([^\s]+)\s+│\s+([0-9.]+)\s+([^\s]+)/
   );
   if (!m) continue;
 
-  const name = m[1];
-  const fastestVal = parseFloat(m[2]);
-  const fastestUnit = m[3];
-  const medianVal = parseFloat(m[6]);
-  const medianUnit = m[7];
+  const name = m[1],
+    fastest_val = parseFloat(m[2]),
+    fastest_unit = m[3],
+    median_val = parseFloat(m[6]),
+    median_unit = m[7],
+    median_ns = median_val * (unit_map[median_unit] || 1),
+    bytes = byteCount(name),
+    throughput_gb = (bytes / median_ns).toFixed(2);
 
-  const medianNs = medianVal * (unitMap[medianUnit] || 1);
-  const bytes = getBytes(name);
-  const throughputGb = (bytes / medianNs).toFixed(2);
-
-  items.push({
+  item_li.push({
     name,
-    fastest: `${fastestVal} ${fastestUnit}`,
-    median: `${medianVal} ${medianUnit}`,
-    medianNs: Math.round(medianNs * 10) / 10,
-    throughputGb: parseFloat(throughputGb),
+    fastest: `${fastest_val} ${fastest_unit}`,
+    median: `${median_val} ${median_unit}`,
+    median_ns: Math.round(median_ns * 10) / 10,
+    throughput_gb: parseFloat(throughput_gb),
   });
 }
 
 // 1. Write github-action-benchmark custom format JSON
-const benchmarkData = items.map((item) => ({
+const bench_data = item_li.map((item) => ({
   name: item.name,
   unit: "ns",
-  value: item.medianNs,
-  extra: `${item.throughputGb} GB/s`,
+  value: item.median_ns,
+  extra: `${item.throughput_gb} GB/s`,
 }));
 
-fs.writeFileSync(outputJsonFile, JSON.stringify(benchmarkData, null, 2), "utf8");
-console.log(`Generated benchmark JSON for ${benchmarkData.length} items -> ${outputJsonFile}`);
+fs.writeFileSync(output_json_file, JSON.stringify(bench_data, null, 2), "utf8");
+console.log(`Generated benchmark JSON for ${bench_data.length} items -> ${output_json_file}`);
 
 // 2. Generate Markdown summary
-let maxDecThroughput = 0;
-let maxEncThroughput = 0;
+let max_dec_throughput = 0,
+  max_enc_throughput = 0;
 
-for (const item of items) {
+for (const item of item_li) {
   if (item.name.includes("decompress")) {
-    if (item.throughputGb > maxDecThroughput) maxDecThroughput = item.throughputGb;
+    if (item.throughput_gb > max_dec_throughput) max_dec_throughput = item.throughput_gb;
   } else {
-    if (item.throughputGb > maxEncThroughput) maxEncThroughput = item.throughputGb;
+    if (item.throughput_gb > max_enc_throughput) max_enc_throughput = item.throughput_gb;
   }
 }
 
 const formatMode = (name) => {
-  if (name.includes("decompress")) return "⚡ Decompress";
-  if (name.includes("cached")) return "🔥 Warm Kernel";
-  if (name.includes("sampled")) return "❄️ Cold Sampled";
-  return "⚡ Default";
+  if (name.includes("decompress")) return "Decompress";
+  if (name.includes("cached")) return "Warm Kernel";
+  if (name.includes("sampled")) return "Cold Sampled";
+  return "Default";
 };
 
-let md = `## 🚀 FastALP Performance Benchmark Summary\n\n`;
-md += `> **Peak Decompression Throughput**: **\`${maxDecThroughput} GB/s\`** | **Peak Compression (Warm)**: **\`${maxEncThroughput} GB/s\`**\n\n`;
+let md = "## FastALP Performance Benchmark Summary\n\n";
+md += `> **Peak Decompression Throughput**: **\`${max_dec_throughput} GB/s\`** | **Peak Compression (Warm)**: **\`${max_enc_throughput} GB/s\`**\n\n`;
+md += "### Benchmark Metrics\n\n";
+md += "| Benchmark Case | Median Latency | Throughput (GB/s) | Mode |\n";
+md += "| :--- | :---: | :---: | :---: |\n";
 
-md += `### 📊 Benchmark Metrics\n\n`;
-md += `| Benchmark Case | Median Latency | Throughput (GB/s) | Mode |\n`;
-md += `| :--- | :---: | :---: | :---: |\n`;
-
-for (const item of items) {
-  md += `| \`${item.name}\` | ${item.median} | **${item.throughputGb} GB/s** | ${formatMode(item.name)} |\n`;
+for (const item of item_li) {
+  md += `| \`${item.name}\` | ${item.median} | **${item.throughput_gb} GB/s** | ${formatMode(item.name)} |\n`;
 }
 
-md += `\n> 📈 **[View Interactive Continuous Benchmark History & Regression Chart](https://webc-site.github.io/fastalp/dev/bench/)**\n`;
+md += "\n> **[View Interactive Continuous Benchmark History & Regression Chart](https://webc-site.github.io/fastalp/dev/bench/)**\n";
 
-fs.writeFileSync(outputMdFile, md, "utf8");
-console.log(`Generated Step Summary Markdown -> ${outputMdFile}`);
+fs.writeFileSync(output_md_file, md, "utf8");
+console.log(`Generated Step Summary Markdown -> ${output_md_file}`);

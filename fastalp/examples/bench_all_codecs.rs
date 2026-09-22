@@ -24,24 +24,28 @@
 //! 评测指标覆盖全部 37 个公开时序数据集及多种微基准测试场景。
 
 use std::{
+  env::{args, var},
   fs::{File, create_dir_all, read_dir, write},
   hint::black_box,
   io::{BufRead, BufReader},
   mem::{size_of, size_of_val},
-  path::Path,
+  path::{Path, PathBuf},
+  process::exit,
   slice::from_raw_parts,
   time::Instant,
 };
 
-use fastalp::decompress_into;
+use fastalp::{Encoder, decompress_into};
 use graupel::{
   Codec, Point,
   codec::{Chimp128, Gorilla},
 };
+use lz4_flex::block::get_maximum_output_size;
 use pco::{
   ChunkConfig,
   standalone::{simple_compress, simple_decompress},
 };
+use serde::Serialize;
 use snap::raw::{Decoder as SnapDecoder, Encoder as SnapEncoder, max_compress_len};
 use zstd::bulk::{compress_to_buffer, decompress_to_buffer};
 
@@ -49,21 +53,26 @@ use zstd::bulk::{compress_to_buffer, decompress_to_buffer};
 /// 微基准测试样本点数（标准单块向量大小：1024 浮点数）。
 const MICRO_LEN: usize = 1024;
 
-/// Microbenchmark raw f64 bytes (1024 * 8 = 8192 bytes).
-/// 微基准测试原始浮点数据大小（1024 * 8 = 8192 字节）。
-const MICRO_RAW_BYTES: usize = MICRO_LEN * size_of::<f64>();
+#[inline]
+fn round2(v: f64) -> f64 {
+  (v * 100.0).round() / 100.0
+}
 
-/// Microbenchmark raw Point bytes for Graupel composite time-series (1024 * 16 = 16384 bytes).
-/// 微基准测试复合时序数据点原始大小（1024 * 16 = 16384 字节）。
-const MICRO_GRAUPEL_RAW_BYTES: usize = MICRO_LEN * size_of::<Point>();
+#[inline]
+fn round4(v: f64) -> f64 {
+  (v * 10000.0).round() / 10000.0
+}
 
 /// Benchmark statistics for a single codec.
 /// 单个编解码器的基准测试统计结果。
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct CodecResult {
   /// Codec display name.
   /// 编解码器展示名称。
   name: &'static str,
+  /// Raw input byte size.
+  /// 原始输入字节大小。
+  raw_bytes: usize,
   /// Compressed byte size.
   /// 压缩后字节大小。
   compressed_bytes: usize,
@@ -87,6 +96,76 @@ struct CodecResult {
   dec_gb_s: f64,
 }
 
+#[derive(Debug, Serialize)]
+struct DatasetItem {
+  name: String,
+  raw_bytes: usize,
+  compressed_bytes: usize,
+  ratio: f64,
+  bits_per_val: f64,
+  enc_gb_s: f64,
+  enc_sampled_gb_s: f64,
+  enc_kernel_gb_s: f64,
+  dec_gb_s: f64,
+}
+
+#[derive(Debug, Serialize)]
+struct Paper31Section {
+  total_raw_bytes: usize,
+  total_compressed_bytes: usize,
+  ratio: f64,
+  bits_per_val: f64,
+  avg_enc_gb_s: f64,
+  avg_enc_sampled_gb_s: f64,
+  avg_enc_kernel_gb_s: f64,
+  avg_dec_gb_s: f64,
+  datasets: Vec<DatasetItem>,
+}
+
+#[derive(Debug, Serialize)]
+struct MicroBenchmarkResult {
+  raw_bytes: usize,
+  compressed_bytes: usize,
+  ratio: f64,
+  bits_per_val: f64,
+  enc_gb_s: f64,
+  enc_sampled_gb_s: f64,
+  enc_kernel_gb_s: f64,
+  dec_gb_s: f64,
+}
+
+impl From<&CodecResult> for MicroBenchmarkResult {
+  fn from(r: &CodecResult) -> Self {
+    Self {
+      raw_bytes: r.raw_bytes,
+      compressed_bytes: r.compressed_bytes,
+      ratio: round4(r.ratio),
+      bits_per_val: round2(r.bits_per_val),
+      enc_gb_s: round2(r.enc_gb_s),
+      enc_sampled_gb_s: round2(r.enc_sampled_gb_s),
+      enc_kernel_gb_s: round2(r.enc_kernel_gb_s),
+      dec_gb_s: round2(r.dec_gb_s),
+    }
+  }
+}
+
+#[derive(Debug, Serialize)]
+struct MicroBenchmarksSection {
+  sensor_1024: MicroBenchmarkResult,
+  ramp_1024: MicroBenchmarkResult,
+  constant_1024: MicroBenchmarkResult,
+  random_1024: MicroBenchmarkResult,
+}
+
+#[derive(Debug, Serialize)]
+struct CodecJsonReport {
+  algorithm: &'static str,
+  display_name: &'static str,
+  category: &'static str,
+  paper_31: Paper31Section,
+  micro_benchmarks: MicroBenchmarksSection,
+}
+
 /// Zero-copy cast f64 slice into immutable byte slice for general byte compressors.
 /// 将双精度浮点数切片零拷贝转换为只读字节切片（用于通用字节压缩算法）。
 #[inline]
@@ -105,7 +184,7 @@ fn bench_fastalp(data: &[f64]) -> CodecResult {
   let iters = 1000;
   let mut compressed = Vec::with_capacity(data.len() * 2 + 64);
   let mut restored: Vec<f64> = Vec::with_capacity(data.len());
-  let mut encoder = fastalp::Encoder::new();
+  let mut encoder = Encoder::new();
 
   // Warm up CPU cache and saturate frequency.
   // 充分预热处理器缓存并使工作频率达到饱和。
@@ -157,6 +236,7 @@ fn bench_fastalp(data: &[f64]) -> CodecResult {
 
   CodecResult {
     name: "fastalp (Rust)",
+    raw_bytes,
     compressed_bytes: compressed.len(),
     ratio: raw_bytes as f64 / compressed.len() as f64,
     bits_per_val: (compressed.len() * 8) as f64 / data.len() as f64,
@@ -171,7 +251,7 @@ fn bench_fastalp(data: &[f64]) -> CodecResult {
 /// 评测 Pcodec 数值压缩算法（压缩级别 3）。
 fn bench_pco(data: &[f64]) -> CodecResult {
   let config = ChunkConfig::default().with_compression_level(3);
-  let iters = 10;
+  let iters = 20;
 
   // Warm up CPU cache.
   // 充分预热处理器缓存。
@@ -206,6 +286,7 @@ fn bench_pco(data: &[f64]) -> CodecResult {
   let dec_gb_s = (raw_bytes as f64 / dec_dt) / 1e9;
   CodecResult {
     name: "Pcodec (pco)",
+    raw_bytes,
     compressed_bytes: compressed.len(),
     ratio: raw_bytes as f64 / compressed.len() as f64,
     bits_per_val: (compressed.len() * 8) as f64 / data.len() as f64,
@@ -220,7 +301,7 @@ fn bench_pco(data: &[f64]) -> CodecResult {
 /// 评测 Zstandard 通用字典压缩算法（压缩级别 3）。
 fn bench_zstd(data: &[f64]) -> CodecResult {
   let raw = as_u8_slice(data);
-  let iters = 20;
+  let iters = 100;
   let mut compressed = vec![0u8; raw.len() + 128];
   let comp_len = compress_to_buffer(raw, &mut compressed, 3).unwrap();
   compressed.truncate(comp_len);
@@ -228,7 +309,7 @@ fn bench_zstd(data: &[f64]) -> CodecResult {
   // Warm up CPU cache.
   // 充分预热处理器缓存。
   let mut restored = vec![0u8; raw.len()];
-  for _ in 0..2 {
+  for _ in 0..5 {
     let _ = decompress_to_buffer(&compressed, &mut restored).unwrap();
   }
 
@@ -256,6 +337,7 @@ fn bench_zstd(data: &[f64]) -> CodecResult {
   let dec_gb_s = (raw_bytes as f64 / dec_dt) / 1e9;
   CodecResult {
     name: "Zstd (level 3)",
+    raw_bytes,
     compressed_bytes: compressed.len(),
     ratio: raw_bytes as f64 / compressed.len() as f64,
     bits_per_val: (compressed.len() * 8) as f64 / data.len() as f64,
@@ -267,35 +349,36 @@ fn bench_zstd(data: &[f64]) -> CodecResult {
 }
 
 /// Benchmark LZ4 (lz4_flex).
-/// 评测 LZ4 极速块级压缩算法。
+/// 评测 LZ4 极速块级压缩算法（零堆分配流水线）。
 fn bench_lz4(data: &[f64]) -> CodecResult {
   let raw = as_u8_slice(data);
-  let iters = 20;
+  let iters = 200;
+  let max_len = get_maximum_output_size(raw.len());
+  let mut comp_buf = vec![0u8; max_len];
+  let comp_len = lz4_flex::compress_into(raw, &mut comp_buf).unwrap();
 
   // Warm up CPU cache.
   // 充分预热处理器缓存。
-  for _ in 0..2 {
-    let c = lz4_flex::compress_prepend_size(raw);
-    let _ = lz4_flex::decompress_size_prepended(&c).unwrap();
+  let mut restored = vec![0u8; raw.len()];
+  for _ in 0..10 {
+    let _ = lz4_flex::compress_into(raw, &mut comp_buf).unwrap();
+    let _ = lz4_flex::decompress_into(&comp_buf[..comp_len], &mut restored).unwrap();
   }
 
-  // Measure encoding throughput.
-  // 测量编码吞吐率。
-  let mut compressed = Vec::new();
+  // Preallocate buffer to eliminate allocation noise (zero heap allocation in loop).
+  // 测量编码吞吐率（预分配零堆分配流水线）。
   let t0 = Instant::now();
   for _ in 0..iters {
-    compressed = lz4_flex::compress_prepend_size(raw);
-    black_box(&compressed);
+    let len = lz4_flex::compress_into(raw, &mut comp_buf).unwrap();
+    black_box(&comp_buf[..len]);
   }
   let enc_dt = t0.elapsed().as_secs_f64() / iters as f64;
 
-  // Measure decoding throughput.
-  // 测量解码吞吐率。
-  let mut restored = Vec::new();
+  let compressed = &comp_buf[..comp_len];
   let t1 = Instant::now();
   for _ in 0..iters {
-    restored = lz4_flex::decompress_size_prepended(&compressed).unwrap();
-    black_box(&restored);
+    let len = lz4_flex::decompress_into(compressed, &mut restored).unwrap();
+    black_box(&restored[..len]);
   }
   let dec_dt = t1.elapsed().as_secs_f64() / iters as f64;
   assert_eq!(restored.len(), raw.len());
@@ -305,9 +388,10 @@ fn bench_lz4(data: &[f64]) -> CodecResult {
   let dec_gb_s = (raw_bytes as f64 / dec_dt) / 1e9;
   CodecResult {
     name: "LZ4 (lz4_flex)",
-    compressed_bytes: compressed.len(),
-    ratio: raw_bytes as f64 / compressed.len() as f64,
-    bits_per_val: (compressed.len() * 8) as f64 / data.len() as f64,
+    raw_bytes,
+    compressed_bytes: comp_len,
+    ratio: raw_bytes as f64 / comp_len as f64,
+    bits_per_val: (comp_len * 8) as f64 / data.len() as f64,
     enc_gb_s,
     enc_sampled_gb_s: enc_gb_s,
     enc_kernel_gb_s: enc_gb_s,
@@ -321,11 +405,11 @@ fn bench_snappy(data: &[f64]) -> CodecResult {
   let raw = as_u8_slice(data);
   let mut enc = SnapEncoder::new();
   let mut dec = SnapDecoder::new();
-  let iters = 20;
+  let iters = 200;
 
   // Warm up CPU cache.
   // 充分预热处理器缓存。
-  for _ in 0..2 {
+  for _ in 0..10 {
     let c = enc.compress_vec(raw).unwrap();
     let _ = dec.decompress_vec(&c).unwrap();
   }
@@ -359,6 +443,7 @@ fn bench_snappy(data: &[f64]) -> CodecResult {
   let dec_gb_s = (raw_bytes as f64 / dec_dt) / 1e9;
   CodecResult {
     name: "Snappy (snap)",
+    raw_bytes,
     compressed_bytes: comp_len,
     ratio: raw_bytes as f64 / comp_len as f64,
     bits_per_val: (comp_len * 8) as f64 / data.len() as f64,
@@ -382,11 +467,11 @@ fn bench_chimp128(data: &[f64]) -> CodecResult {
     .enumerate()
     .map(|(i, &v)| Point::new(i as i64, v))
     .collect();
-  let iters = 10;
+  let iters = 50;
 
   // Warm up CPU cache.
   // 充分预热处理器缓存。
-  for _ in 0..2 {
+  for _ in 0..5 {
     let c = Chimp128.encode(&points).unwrap();
     let _ = graupel::decode(&c).unwrap();
   }
@@ -419,6 +504,7 @@ fn bench_chimp128(data: &[f64]) -> CodecResult {
   let dec_gb_s = (raw_bytes as f64 / dec_dt) / 1e9;
   CodecResult {
     name: "Chimp128 (ts+val)",
+    raw_bytes,
     compressed_bytes: compressed.len(),
     ratio: raw_bytes as f64 / compressed.len() as f64,
     bits_per_val: (compressed.len() * 8) as f64 / points.len() as f64,
@@ -442,11 +528,11 @@ fn bench_gorilla(data: &[f64]) -> CodecResult {
     .enumerate()
     .map(|(i, &v)| Point::new(i as i64, v))
     .collect();
-  let iters = 10;
+  let iters = 50;
 
   // Warm up CPU cache.
   // 充分预热处理器缓存。
-  for _ in 0..2 {
+  for _ in 0..5 {
     let c = Gorilla.encode(&points).unwrap();
     let _ = graupel::decode(&c).unwrap();
   }
@@ -479,6 +565,7 @@ fn bench_gorilla(data: &[f64]) -> CodecResult {
   let dec_gb_s = (raw_bytes as f64 / dec_dt) / 1e9;
   CodecResult {
     name: "Gorilla (ts+val)",
+    raw_bytes,
     compressed_bytes: compressed.len(),
     ratio: raw_bytes as f64 / compressed.len() as f64,
     bits_per_val: (compressed.len() * 8) as f64 / points.len() as f64,
@@ -490,23 +577,28 @@ fn bench_gorilla(data: &[f64]) -> CodecResult {
 }
 
 /// Load standard time-series datasets from disk.
-/// 从磁盘加载全部公开时序测试数据集。
+/// 从磁盘加载全部公开时序测试数据集（严格支持 ALP_DIR 环境变量与相对候选路径）。
 fn load_paper_samples() -> Vec<(String, Vec<f64>)> {
-  // Candidate relative and absolute directory paths.
-  // 候选相对路径与绝对路径列表。
+  let alp_dir = var("ALP_DIR")
+    .map(PathBuf::from)
+    .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../ALP"));
+
   let candidates = [
-    Path::new("/Users/z/git/db/ALP/data/samples"),
-    Path::new("../ALP/data/samples"),
-    Path::new("../../ALP/data/samples"),
+    alp_dir.join("data/samples"),
+    PathBuf::from("../ALP/data/samples"),
+    PathBuf::from("../../ALP/data/samples"),
+    PathBuf::from("ALP/data/samples"),
   ];
-  let Some(&dir) = candidates.iter().find(|p| p.exists()) else {
-    return Vec::new();
+
+  let Some(dir) = candidates.into_iter().find(|p| p.exists()) else {
+    eprintln!(
+      "Error: samples directory not found. Please set ALP_DIR or place ALP repository beside workspace."
+    );
+    exit(1);
   };
 
   let mut list = Vec::new();
-  if let Ok(entries) = read_dir(dir) {
-    // Read and sort CSV sample file paths.
-    // 读取并按字母顺序排序样本文件路径。
+  if let Ok(entries) = read_dir(&dir) {
     let mut paths: Vec<_> = entries.flatten().map(|e| e.path()).collect();
     paths.sort();
     for p in paths {
@@ -515,8 +607,6 @@ fn load_paper_samples() -> Vec<(String, Vec<f64>)> {
           continue;
         };
         if let Ok(f) = File::open(&p) {
-          // Parse floating-point numbers line by line.
-          // 逐行解析双精度浮点数值。
           let vals: Vec<f64> = BufReader::new(f)
             .lines()
             .map_while(Result::ok)
@@ -536,22 +626,38 @@ fn load_paper_samples() -> Vec<(String, Vec<f64>)> {
       }
     }
   }
+
+  if list.is_empty() {
+    eprintln!(
+      "Error: Found samples dir {:?} but 0 valid CSV datasets.",
+      dir
+    );
+    exit(1);
+  }
+
   list
 }
 
-/// Benchmark suite entry point for executing all codecs and generating JSON reports.
-/// 运行全量算法基准测试并生成各算法独立 JSON 报表的主入口函数。
+/// Benchmark suite entry point for executing codecs and generating JSON reports.
+/// 运行算法基准测试并生成各算法独立结构化 JSON 报表的主入口函数。
 fn main() {
-  println!("Running full benchmark suite & generating individual algorithm JSONs...");
+  let filter_arg = args().nth(1);
+  let algo_keys: Vec<&'static str> = match filter_arg.as_deref() {
+    Some("fastalp") => vec!["fastalp"],
+    Some("all") | None => vec![
+      "fastalp", "pco", "zstd", "lz4", "snappy", "chimp128", "gorilla",
+    ],
+    Some(other) => {
+      eprintln!("Unknown algorithm filter: {other}. Available: fastalp, all");
+      exit(1);
+    }
+  };
+
+  println!("Running benchmark suite for: {:?}", algo_keys);
 
   // Load standard time-series datasets.
   // 加载公开标准时序测试数据集。
   let samples = load_paper_samples();
-  if samples.is_empty() {
-    eprintln!("Warning: No test samples found in candidates path.");
-    return;
-  }
-
   println!("Found {} datasets to benchmark.", samples.len());
 
   // Prepare standard microbenchmark scenarios (1024 floats each).
@@ -577,12 +683,6 @@ fn main() {
   };
   let _ = create_dir_all(json_dir);
 
-  // List of codecs to benchmark.
-  // 待评测算法键名列表。
-  let algo_keys = [
-    "fastalp", "pco", "zstd", "lz4", "snappy", "chimp128", "gorilla",
-  ];
-
   // Benchmark each codec across all datasets and scenarios.
   // 逐一评测各算法在全量数据集与微基准场景下的表现。
   for &key in &algo_keys {
@@ -604,15 +704,7 @@ fn main() {
     let constant_res = runner(&constant_data);
     let random_res = runner(&random_noise);
 
-    // Microbenchmark raw byte count (aligned to 16 bytes for Graupel composite Point).
-    // 微基准测试原始字节数（针对 Graupel 复合时序点严格对齐为 16 字节分母）。
-    let micro_raw_bytes = if key == "chimp128" || key == "gorilla" {
-      MICRO_GRAUPEL_RAW_BYTES
-    } else {
-      MICRO_RAW_BYTES
-    };
-
-    let mut ds_json_items = Vec::with_capacity(samples.len());
+    let mut ds_items = Vec::with_capacity(samples.len());
     let mut total_raw = 0;
     let mut total_compressed = 0;
     let mut sum_enc = 0.0;
@@ -636,16 +728,17 @@ fn main() {
       sum_enc_kernel += r.enc_kernel_gb_s;
       sum_dec += r.dec_gb_s;
 
-      ds_json_items.push(format!(
-        r#"{{"name":"{name}","raw_bytes":{raw_bytes},"compressed_bytes":{},"ratio":{:.4},"bits_per_val":{:.2},"enc_gb_s":{:.2},"enc_sampled_gb_s":{:.2},"enc_kernel_gb_s":{:.2},"dec_gb_s":{:.2}}}"#,
-        r.compressed_bytes,
-        r.ratio,
-        r.bits_per_val,
-        r.enc_gb_s,
-        r.enc_sampled_gb_s,
-        r.enc_kernel_gb_s,
-        r.dec_gb_s
-      ));
+      ds_items.push(DatasetItem {
+        name: name.clone(),
+        raw_bytes,
+        compressed_bytes: r.compressed_bytes,
+        ratio: round4(r.ratio),
+        bits_per_val: round2(r.bits_per_val),
+        enc_gb_s: round2(r.enc_gb_s),
+        enc_sampled_gb_s: round2(r.enc_sampled_gb_s),
+        enc_kernel_gb_s: round2(r.enc_kernel_gb_s),
+        dec_gb_s: round2(r.dec_gb_s),
+      });
     }
 
     let n_ds = samples.len() as f64;
@@ -667,109 +760,33 @@ fn main() {
       "general_bytes"
     };
 
-    // Serialize benchmark statistics to JSON format.
-    // 将基准测试统计结果序列化为 JSON 格式。
-    let json_content = format!(
-      r#"{{
-  "algorithm": "{key}",
-  "display_name": "{}",
-  "category": "{category}",
-  "paper_31": {{
-    "total_raw_bytes": {total_raw},
-    "total_compressed_bytes": {total_compressed},
-    "ratio": {:.4},
-    "bits_per_val": {:.2},
-    "avg_enc_gb_s": {:.2},
-    "avg_enc_sampled_gb_s": {:.2},
-    "avg_enc_kernel_gb_s": {:.2},
-    "avg_dec_gb_s": {:.2},
-    "datasets": [
-      {}
-    ]
-  }},
-  "micro_benchmarks": {{
-    "sensor_1024": {{
-      "raw_bytes": {micro_raw_bytes},
-      "compressed_bytes": {},
-      "ratio": {:.4},
-      "bits_per_val": {:.2},
-      "enc_gb_s": {:.2},
-      "enc_sampled_gb_s": {:.2},
-      "enc_kernel_gb_s": {:.2},
-      "dec_gb_s": {:.2}
-    }},
-    "ramp_1024": {{
-      "raw_bytes": {micro_raw_bytes},
-      "compressed_bytes": {},
-      "ratio": {:.4},
-      "bits_per_val": {:.2},
-      "enc_gb_s": {:.2},
-      "enc_sampled_gb_s": {:.2},
-      "enc_kernel_gb_s": {:.2},
-      "dec_gb_s": {:.2}
-    }},
-    "constant_1024": {{
-      "raw_bytes": {micro_raw_bytes},
-      "compressed_bytes": {},
-      "ratio": {:.4},
-      "bits_per_val": {:.2},
-      "enc_gb_s": {:.2},
-      "enc_sampled_gb_s": {:.2},
-      "enc_kernel_gb_s": {:.2},
-      "dec_gb_s": {:.2}
-    }},
-    "random_1024": {{
-      "raw_bytes": {micro_raw_bytes},
-      "compressed_bytes": {},
-      "ratio": {:.4},
-      "bits_per_val": {:.2},
-      "enc_gb_s": {:.2},
-      "enc_sampled_gb_s": {:.2},
-      "enc_kernel_gb_s": {:.2},
-      "dec_gb_s": {:.2}
-    }}
-  }}
-}}"#,
-      sensor_res.name,
-      avg_ratio,
-      avg_bv,
-      avg_enc,
-      avg_enc_sampled,
-      avg_enc_kernel,
-      avg_dec,
-      ds_json_items.join(",\n      "),
-      sensor_res.compressed_bytes,
-      sensor_res.ratio,
-      sensor_res.bits_per_val,
-      sensor_res.enc_gb_s,
-      sensor_res.enc_sampled_gb_s,
-      sensor_res.enc_kernel_gb_s,
-      sensor_res.dec_gb_s,
-      ramp_res.compressed_bytes,
-      ramp_res.ratio,
-      ramp_res.bits_per_val,
-      ramp_res.enc_gb_s,
-      ramp_res.enc_sampled_gb_s,
-      ramp_res.enc_kernel_gb_s,
-      ramp_res.dec_gb_s,
-      constant_res.compressed_bytes,
-      constant_res.ratio,
-      constant_res.bits_per_val,
-      constant_res.enc_gb_s,
-      constant_res.enc_sampled_gb_s,
-      constant_res.enc_kernel_gb_s,
-      constant_res.dec_gb_s,
-      random_res.compressed_bytes,
-      random_res.ratio,
-      random_res.bits_per_val,
-      random_res.enc_gb_s,
-      random_res.enc_sampled_gb_s,
-      random_res.enc_kernel_gb_s,
-      random_res.dec_gb_s,
-    );
+    let report = CodecJsonReport {
+      algorithm: key,
+      display_name: sensor_res.name,
+      category,
+      paper_31: Paper31Section {
+        total_raw_bytes: total_raw,
+        total_compressed_bytes: total_compressed,
+        ratio: round4(avg_ratio),
+        bits_per_val: round2(avg_bv),
+        avg_enc_gb_s: round2(avg_enc),
+        avg_enc_sampled_gb_s: round2(avg_enc_sampled),
+        avg_enc_kernel_gb_s: round2(avg_enc_kernel),
+        avg_dec_gb_s: round2(avg_dec),
+        datasets: ds_items,
+      },
+      micro_benchmarks: MicroBenchmarksSection {
+        sensor_1024: (&sensor_res).into(),
+        ramp_1024: (&ramp_res).into(),
+        constant_1024: (&constant_res).into(),
+        random_1024: (&random_res).into(),
+      },
+    };
 
     let file_path = json_dir.join(format!("{key}.json"));
-    write(&file_path, json_content).expect("write json failed");
+    let json_content =
+      serde_json::to_string_pretty(&report).expect("Failed to serialize codec report to JSON");
+    write(&file_path, json_content).expect("Failed to write report file");
     println!("Generated {:?}", file_path);
   }
 
