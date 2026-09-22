@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790054037800,
+  "lastUpdate": 1790054063657,
   "repoUrl": "https://github.com/webc-site/fastalp",
   "entries": {
     "FastALP Microbenchmarks": [
@@ -1174,6 +1174,174 @@ window.BENCHMARK_DATA = {
             "value": 839.4,
             "unit": "ns",
             "extra": "9.76 GB/s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "x-at-01@googlegroups.com",
+            "name": "x-at-01",
+            "username": "x-at-01"
+          },
+          "committer": {
+            "email": "x-at-01@googlegroups.com",
+            "name": "x-at-01",
+            "username": "x-at-01"
+          },
+          "distinct": false,
+          "id": "85ec8c78dc7cc36688f6b3e469178b9d5fe5e9a5",
+          "message": "docs: update benchmark chart image in intro.md and README.md",
+          "timestamp": "2026-09-22T13:13:24+08:00",
+          "tree_id": "0f9b3c764e5557ab5621a7d7218a0c810bfd3be3",
+          "url": "https://github.com/webc-site/fastalp/commit/85ec8c78dc7cc36688f6b3e469178b9d5fe5e9a5"
+        },
+        "date": 1790054063145,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bench_compress_f32_large_batch_cached",
+            "value": 52420,
+            "unit": "ns",
+            "extra": "5 GB/s"
+          },
+          {
+            "name": "bench_compress_f32_large_batch_sampled",
+            "value": 119500,
+            "unit": "ns",
+            "extra": "2.19 GB/s"
+          },
+          {
+            "name": "bench_compress_f32_ramp_cached_1024",
+            "value": 1336,
+            "unit": "ns",
+            "extra": "3.07 GB/s"
+          },
+          {
+            "name": "bench_compress_f32_ramp_sampled_1024",
+            "value": 2554,
+            "unit": "ns",
+            "extra": "1.6 GB/s"
+          },
+          {
+            "name": "bench_compress_f32_sensor_cached_1024",
+            "value": 931.1,
+            "unit": "ns",
+            "extra": "4.4 GB/s"
+          },
+          {
+            "name": "bench_compress_f32_sensor_sampled_1024",
+            "value": 3836,
+            "unit": "ns",
+            "extra": "1.07 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_identical_cached_1024",
+            "value": 683.1,
+            "unit": "ns",
+            "extra": "11.99 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_identical_sampled_1024",
+            "value": 3976,
+            "unit": "ns",
+            "extra": "2.06 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_large_batch_cached",
+            "value": 178500,
+            "unit": "ns",
+            "extra": "2.94 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_large_batch_sampled",
+            "value": 241200,
+            "unit": "ns",
+            "extra": "2.17 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_ramp_cached_1024",
+            "value": 3425,
+            "unit": "ns",
+            "extra": "2.39 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_ramp_sampled_1024",
+            "value": 4688,
+            "unit": "ns",
+            "extra": "1.75 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_random_cached_1024",
+            "value": 4953,
+            "unit": "ns",
+            "extra": "1.65 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_random_sampled_1024",
+            "value": 34250,
+            "unit": "ns",
+            "extra": "0.24 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_sensor_cached_1024",
+            "value": 2910,
+            "unit": "ns",
+            "extra": "2.82 GB/s"
+          },
+          {
+            "name": "bench_compress_f64_sensor_sampled_1024",
+            "value": 5539,
+            "unit": "ns",
+            "extra": "1.48 GB/s"
+          },
+          {
+            "name": "bench_decompress_f32_large_batch",
+            "value": 14030,
+            "unit": "ns",
+            "extra": "18.68 GB/s"
+          },
+          {
+            "name": "bench_decompress_f32_ramp_1024",
+            "value": 306.1,
+            "unit": "ns",
+            "extra": "13.38 GB/s"
+          },
+          {
+            "name": "bench_decompress_f32_sensor_1024",
+            "value": 254.8,
+            "unit": "ns",
+            "extra": "16.08 GB/s"
+          },
+          {
+            "name": "bench_decompress_f64_identical_1024",
+            "value": 227.6,
+            "unit": "ns",
+            "extra": "35.99 GB/s"
+          },
+          {
+            "name": "bench_decompress_f64_large_batch",
+            "value": 52380,
+            "unit": "ns",
+            "extra": "10.01 GB/s"
+          },
+          {
+            "name": "bench_decompress_f64_ramp_1024",
+            "value": 850.8,
+            "unit": "ns",
+            "extra": "9.63 GB/s"
+          },
+          {
+            "name": "bench_decompress_f64_random_1024",
+            "value": 1291,
+            "unit": "ns",
+            "extra": "6.35 GB/s"
+          },
+          {
+            "name": "bench_decompress_f64_sensor_1024",
+            "value": 860.8,
+            "unit": "ns",
+            "extra": "9.52 GB/s"
           }
         ]
       }
