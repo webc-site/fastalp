@@ -224,19 +224,19 @@ fn main() {
     let raw_bytes = data.len() * 8;
     total_raw_bytes += raw_bytes;
 
-    // Warmup
+    // Warmup: sufficiently ramp up CPU frequency to High P-state and preheat branch predictor
     encoder.reset();
-    for _ in 0..100 {
+    for _ in 0..500 {
       comp_buf.clear();
       compress_into(&data, &mut comp_buf);
       dec_buf.clear();
       let _ = decompress_into::<f64>(&comp_buf, &mut dec_buf);
     }
 
-    // Measure End-to-End Compression with Dynamic Sampling (min of 3 rounds of 1000 iters)
+    // Measure End-to-End Compression with Dynamic Sampling (min of 5 rounds of 1000 iters)
     let comp_iters = 1000;
     let mut best_enc_dur = Duration::MAX;
-    for _ in 0..3 {
+    for _ in 0..5 {
       let start_enc = Instant::now();
       for _ in 0..comp_iters {
         comp_buf.clear();
@@ -247,12 +247,12 @@ fn main() {
     }
     let enc_gb_s = (raw_bytes as f64 * comp_iters as f64) / (best_enc_dur.as_secs_f64() * 1e9);
 
-    // Measure Pure Encoding Kernel Without Sampling (Reusing Cached Parameters, min of 3 rounds of 1000 iters)
+    // Measure Pure Encoding Kernel Without Sampling (Reusing Cached Parameters, min of 5 rounds of 1000 iters)
     encoder.reset();
     comp_buf.clear();
     encoder.compress_into(&data, &mut comp_buf); // First pass establishes cached parameters
     let mut best_enc_kern_dur = Duration::MAX;
-    for _ in 0..3 {
+    for _ in 0..5 {
       let start_enc_kern = Instant::now();
       for _ in 0..comp_iters {
         comp_buf.clear();
@@ -264,10 +264,10 @@ fn main() {
     let enc_kernel_gb_s =
       (raw_bytes as f64 * comp_iters as f64) / (best_enc_kern_dur.as_secs_f64() * 1e9);
 
-    // Measure Decompression (min of 3 rounds of 1000 iters - exact match with C++ ALP benchmark)
+    // Measure Decompression (min of 5 rounds of 1000 iters - exact match with C++ ALP benchmark)
     let dec_iters = 1000;
     let mut best_dec_dur = Duration::MAX;
-    for _ in 0..3 {
+    for _ in 0..5 {
       let start_dec = Instant::now();
       for _ in 0..dec_iters {
         dec_buf.clear();

@@ -35,7 +35,7 @@ pub fn bitpack_u64(values: &[u64], bit_width: u8, dst: &mut Vec<u8>) {
     // SAFETY: dst 已 reserve(total_bytes + 16)，按 8 个整数一组打包写入 stride 字节，余数在结尾填充，完全覆盖 total_bytes 且不越界。
     unsafe {
       let dst_start = dst.as_mut_ptr().add(old_len);
-      let dst_ptr = match_pack_23!(
+      let dst_ptr = match_pack_32!(
         bit_width,
         fallback => {
           let stride = bit_width as usize;
@@ -138,7 +138,7 @@ pub fn bitpack_encoded<F: AlpFloat>(
     // SAFETY: dst 已预先 reserve(total_bytes + 16)，按 8 个整数一组打包写入 stride 字节，完全覆盖 total_bytes。
     unsafe {
       let dst_start = dst.as_mut_ptr().add(old_len);
-      let dst_ptr = match_pack_23!(
+      let dst_ptr = match_pack_32!(
         bit_width,
         fallback => {
           let stride = bit_width as usize;
@@ -244,7 +244,7 @@ pub fn bitpack_fused_delta<F: AlpFloat>(
     unsafe {
       let dst_start = dst.as_mut_ptr().add(old_len);
       let raw_ptr = raw_ints.as_ptr();
-      let dst_ptr = match_pack_23!(
+      let dst_ptr = match_pack_32!(
         bit_width,
         fallback => {
           let stride = bit_width as usize;
@@ -350,6 +350,61 @@ unsafe fn pack_chunk_8(bit_width: u8, chunk: [u64; CHUNK_8], dst_ptr: *mut u8) {
   }
 }
 
+/// Monomorphized constant bit-width packing for zero runtime branch overhead.
+/// 针对编译期已知位宽的单态化零分支打包内核
+#[inline(always)]
+unsafe fn pack_chunk_8_const<const W: u8>(chunk: [u64; CHUNK_8], dst_ptr: *mut u8) {
+  unsafe {
+    match W {
+      1..=16 => pack_8_unrolled(W, chunk, dst_ptr),
+      20 => {
+        let [o0, o1, o2, o3, o4, o5, o6, o7] = chunk;
+        let p0 = o0 | (o1 << 20);
+        let p1 = o2 | (o3 << 20);
+        let p2 = o4 | (o5 << 20);
+        let p3 = o6 | (o7 << 20);
+        dst_ptr.cast::<u64>().write_unaligned(p0.to_le());
+        dst_ptr.add(5).cast::<u64>().write_unaligned(p1.to_le());
+        dst_ptr.add(10).cast::<u64>().write_unaligned(p2.to_le());
+        dst_ptr.add(15).cast::<u64>().write_unaligned(p3.to_le());
+      }
+      24 => {
+        let [o0, o1, o2, o3, o4, o5, o6, o7] = chunk;
+        let w0 = o0 | (o1 << 24) | (o2 << 48);
+        let w1 = (o2 >> 16) | (o3 << 8) | (o4 << 32) | (o5 << 56);
+        let w2 = (o5 >> 8) | (o6 << 16) | (o7 << 40);
+        dst_ptr.cast::<u64>().write_unaligned(w0.to_le());
+        dst_ptr.add(8).cast::<u64>().write_unaligned(w1.to_le());
+        dst_ptr.add(16).cast::<u64>().write_unaligned(w2.to_le());
+      }
+      28 => {
+        let [o0, o1, o2, o3, o4, o5, o6, o7] = chunk;
+        let p0 = o0 | (o1 << 28);
+        let p1 = o2 | (o3 << 28);
+        let p2 = o4 | (o5 << 28);
+        let p3 = o6 | (o7 << 28);
+        dst_ptr.cast::<u64>().write_unaligned(p0.to_le());
+        dst_ptr.add(7).cast::<u64>().write_unaligned(p1.to_le());
+        dst_ptr.add(14).cast::<u64>().write_unaligned(p2.to_le());
+        dst_ptr.add(21).cast::<u64>().write_unaligned(p3.to_le());
+      }
+      32 => {
+        let [o0, o1, o2, o3, o4, o5, o6, o7] = chunk;
+        let w0 = o0 | (o1 << 32);
+        let w1 = o2 | (o3 << 32);
+        let w2 = o4 | (o5 << 32);
+        let w3 = o6 | (o7 << 32);
+        dst_ptr.cast::<u64>().write_unaligned(w0.to_le());
+        dst_ptr.add(8).cast::<u64>().write_unaligned(w1.to_le());
+        dst_ptr.add(16).cast::<u64>().write_unaligned(w2.to_le());
+        dst_ptr.add(24).cast::<u64>().write_unaligned(w3.to_le());
+      }
+      17..=31 => pack_8_w17_to_w32_const::<W>(chunk, dst_ptr),
+      _ => pack_8_w33_to_w48(W, chunk, dst_ptr),
+    }
+  }
+}
+
 #[inline(always)]
 unsafe fn pack_encoded_chunks<F: AlpFloat, const W: u8>(
   chunks: &[[F::Int; CHUNK_8]],
@@ -359,7 +414,7 @@ unsafe fn pack_encoded_chunks<F: AlpFloat, const W: u8>(
   let stride = W as usize;
   for chunk in chunks {
     unsafe {
-      pack_chunk_8(W, diff_chunk_8::<F>(chunk, base), dst_ptr);
+      pack_chunk_8_const::<W>(diff_chunk_8::<F>(chunk, base), dst_ptr);
       dst_ptr = dst_ptr.add(stride);
     }
   }
@@ -372,7 +427,7 @@ unsafe fn pack_u64_chunks<const W: u8>(chunks: &[[u64; CHUNK_8]], mut dst_ptr: *
   let mask = bit_mask(W);
   for chunk in chunks {
     unsafe {
-      pack_chunk_8(W, mask_chunk_8(chunk, mask), dst_ptr);
+      pack_chunk_8_const::<W>(mask_chunk_8(chunk, mask), dst_ptr);
       dst_ptr = dst_ptr.add(stride);
     }
   }
@@ -390,7 +445,7 @@ unsafe fn pack_fused_delta_chunks<F: AlpFloat, const W: u8>(
   let mut p = raw_ptr;
   for _ in 0..num_chunks {
     unsafe {
-      pack_chunk_8(W, delta_chunk_8::<F>(p, min_delta), dst_ptr);
+      pack_chunk_8_const::<W>(delta_chunk_8::<F>(p, min_delta), dst_ptr);
       dst_ptr = dst_ptr.add(stride);
       p = p.add(CHUNK_8);
     }
@@ -729,6 +784,31 @@ unsafe fn pack_8_w17_to_w32(w: u8, o: [u64; 8], dst_ptr: *mut u8) {
     write_pair(p1, w2, w as usize * 2, dst_ptr);
     write_pair(p2, w2, w as usize * 4, dst_ptr);
     write_pair(p3, w2, w as usize * 6, dst_ptr);
+  }
+}
+
+/// Constant bit-width packing for 8 integers of width 17..=32 (zero division/branch via inline constant propagation).
+/// 编译期已知位宽打包 8 个 17..=32 位整数（内联常量折叠消除运行时除法与条件分支）
+#[inline(always)]
+unsafe fn pack_8_w17_to_w32_const<const W: u8>(o: [u64; 8], dst_ptr: *mut u8) {
+  let [o0, o1, o2, o3, o4, o5, o6, o7] = o;
+  let w_u32 = W as u32;
+  let w2 = w_u32 * 2;
+  let b0 = 0usize;
+  let b1 = (W as usize) * 2;
+  let b2 = (W as usize) * 4;
+  let b3 = (W as usize) * 6;
+
+  let p0 = o0 | (o1 << w_u32);
+  let p1 = o2 | (o3 << w_u32);
+  let p2 = o4 | (o5 << w_u32);
+  let p3 = o6 | (o7 << w_u32);
+
+  unsafe {
+    write_pair(p0, w2, b0, dst_ptr);
+    write_pair(p1, w2, b1, dst_ptr);
+    write_pair(p2, w2, b2, dst_ptr);
+    write_pair(p3, w2, b3, dst_ptr);
   }
 }
 

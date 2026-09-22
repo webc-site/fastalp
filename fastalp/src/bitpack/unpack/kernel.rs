@@ -188,6 +188,21 @@ pub(crate) unsafe fn unpack_16<T: Copy, C: AlpConsumer<T>>(
 ) {
   let src_ptr16 = src_ptr.cast::<u16>();
   let mut i = 0;
+  while i + 16 <= count {
+    unsafe {
+      let chunk0 = u128::from_le(src_ptr.add(i * 2).cast::<u128>().read_unaligned());
+      let chunk1 = u128::from_le(src_ptr.add((i + 8) * 2).cast::<u128>().read_unaligned());
+      consumer.consume_8(
+        arr_8!(k => ((chunk0 >> (k * 16)) as u16) as u64),
+        dst_ptr.add(i),
+      );
+      consumer.consume_8(
+        arr_8!(k => ((chunk1 >> (k * 16)) as u16) as u64),
+        dst_ptr.add(i + 8),
+      );
+    }
+    i += 16;
+  }
   while i + 8 <= count {
     unsafe {
       let chunk = u128::from_le(src_ptr.add(i * 2).cast::<u128>().read_unaligned());
@@ -218,10 +233,58 @@ pub(crate) unsafe fn unpack_32<T: Copy, C: AlpConsumer<T>>(
 ) {
   let src_ptr32 = src_ptr.cast::<u32>();
   let mut i = 0;
+  while i + 16 <= count {
+    unsafe {
+      let p = src_ptr.add(i * 4);
+      let c0 = u128::from_le(p.cast::<u128>().read_unaligned());
+      let c1 = u128::from_le(p.add(16).cast::<u128>().read_unaligned());
+      let c2 = u128::from_le(p.add(32).cast::<u128>().read_unaligned());
+      let c3 = u128::from_le(p.add(48).cast::<u128>().read_unaligned());
+      consumer.consume_8(
+        [
+          c0 as u32 as u64,
+          (c0 >> 32) as u32 as u64,
+          (c0 >> 64) as u32 as u64,
+          (c0 >> 96) as u32 as u64,
+          c1 as u32 as u64,
+          (c1 >> 32) as u32 as u64,
+          (c1 >> 64) as u32 as u64,
+          (c1 >> 96) as u32 as u64,
+        ],
+        dst_ptr.add(i),
+      );
+      consumer.consume_8(
+        [
+          c2 as u32 as u64,
+          (c2 >> 32) as u32 as u64,
+          (c2 >> 64) as u32 as u64,
+          (c2 >> 96) as u32 as u64,
+          c3 as u32 as u64,
+          (c3 >> 32) as u32 as u64,
+          (c3 >> 64) as u32 as u64,
+          (c3 >> 96) as u32 as u64,
+        ],
+        dst_ptr.add(i + 8),
+      );
+    }
+    i += 16;
+  }
   while i + 8 <= count {
     unsafe {
+      let p = src_ptr.add(i * 4);
+      let c0 = u128::from_le(p.cast::<u128>().read_unaligned());
+      let c1 = u128::from_le(p.add(16).cast::<u128>().read_unaligned());
       consumer.consume_8(
-        arr_8!(k => u32::from_le(src_ptr32.add(i + k).read_unaligned()) as u64),
+        [
+          c0 as u32 as u64,
+          (c0 >> 32) as u32 as u64,
+          (c0 >> 64) as u32 as u64,
+          (c0 >> 96) as u32 as u64,
+          c1 as u32 as u64,
+          (c1 >> 32) as u32 as u64,
+          (c1 >> 64) as u32 as u64,
+          (c1 >> 96) as u32 as u64,
+        ],
         dst_ptr.add(i),
       );
     }
@@ -387,6 +450,56 @@ pub(crate) unsafe fn unpack_17_to_32<T: Copy, C: AlpConsumer<T>, const BW: usize
   let mut i = 0;
 
   unsafe {
+    while i + 16 <= fast_end_8 {
+      let chunk0 = u128::from_le(src_ptr.add(byte_offset).cast::<u128>().read_unaligned());
+      let chunk1 = u128::from_le(
+        src_ptr
+          .add(byte_offset + mid_byte)
+          .cast::<u128>()
+          .read_unaligned(),
+      );
+      let chunk2 = u128::from_le(
+        src_ptr
+          .add(byte_offset + BW)
+          .cast::<u128>()
+          .read_unaligned(),
+      );
+      let chunk3 = u128::from_le(
+        src_ptr
+          .add(byte_offset + BW + mid_byte)
+          .cast::<u128>()
+          .read_unaligned(),
+      );
+      consumer.consume_8(
+        [
+          (chunk0 as u64) & mask,
+          ((chunk0 >> BW) as u64) & mask,
+          ((chunk0 >> (BW * 2)) as u64) & mask,
+          ((chunk0 >> (BW * 3)) as u64) & mask,
+          ((chunk1 >> mid_shift) as u64) & mask,
+          ((chunk1 >> (mid_shift + BW)) as u64) & mask,
+          ((chunk1 >> (mid_shift + BW * 2)) as u64) & mask,
+          ((chunk1 >> (mid_shift + BW * 3)) as u64) & mask,
+        ],
+        dst_ptr.add(i),
+      );
+      consumer.consume_8(
+        [
+          (chunk2 as u64) & mask,
+          ((chunk2 >> BW) as u64) & mask,
+          ((chunk2 >> (BW * 2)) as u64) & mask,
+          ((chunk2 >> (BW * 3)) as u64) & mask,
+          ((chunk3 >> mid_shift) as u64) & mask,
+          ((chunk3 >> (mid_shift + BW)) as u64) & mask,
+          ((chunk3 >> (mid_shift + BW * 2)) as u64) & mask,
+          ((chunk3 >> (mid_shift + BW * 3)) as u64) & mask,
+        ],
+        dst_ptr.add(i + 8),
+      );
+      byte_offset += BW * 2;
+      i += 16;
+    }
+
     while i + 8 <= fast_end_8 {
       let chunk0 = u128::from_le(src_ptr.add(byte_offset).cast::<u128>().read_unaligned());
       let chunk1 = u128::from_le(

@@ -375,28 +375,41 @@ unsafe fn decode_rd_raw<F: AlpFloat>(payload: &[u8], count: usize, dst_ptr: *mut
       cur_left_cursor += cur_left_bytes;
 
       if size_of::<F>() == 8 {
-        // SAFETY: dst_ptr + block_offset has cur_count elements, for size_of 8, u64 layout is identical
         let dst_u64_ptr = unsafe { dst_ptr.add(block_offset).cast::<u64>() };
-        unsafe {
-          bitunpack_u64_raw(
-            &payload[cur_right_cursor..cur_right_cursor + cur_right_bytes],
-            cur_count,
-            right_bw,
-            dst_u64_ptr,
-          )?;
-        }
-        cur_right_cursor += cur_right_bytes;
+        if right_bw == 0 {
+          let dst_u64 = unsafe { from_raw_parts_mut(dst_u64_ptr, cur_count) };
+          let (dst_chunks, dst_rem) = dst_u64.as_chunks_mut::<8>();
+          let (left_chunks, left_rem) = left_buf[..cur_count].as_chunks::<8>();
+          for (dc, lc) in dst_chunks.iter_mut().zip(left_chunks.iter()) {
+            unroll_8!(k => {
+              dc[k] = shifted_dict[lc[k] as usize & 7];
+            });
+          }
+          for (d, l) in dst_rem.iter_mut().zip(left_rem.iter()) {
+            *d = shifted_dict[*l as usize & 7];
+          }
+        } else {
+          unsafe {
+            bitunpack_u64_raw(
+              &payload[cur_right_cursor..cur_right_cursor + cur_right_bytes],
+              cur_count,
+              right_bw,
+              dst_u64_ptr,
+            )?;
+          }
+          cur_right_cursor += cur_right_bytes;
 
-        let dst_u64 = unsafe { from_raw_parts_mut(dst_u64_ptr, cur_count) };
-        let (dst_chunks, dst_rem) = dst_u64.as_chunks_mut::<8>();
-        let (left_chunks, left_rem) = left_buf[..cur_count].as_chunks::<8>();
-        for (dc, lc) in dst_chunks.iter_mut().zip(left_chunks.iter()) {
-          unroll_8!(k => {
-            dc[k] |= shifted_dict[lc[k] as usize & 7];
-          });
-        }
-        for (d, l) in dst_rem.iter_mut().zip(left_rem.iter()) {
-          *d |= shifted_dict[*l as usize & 7];
+          let dst_u64 = unsafe { from_raw_parts_mut(dst_u64_ptr, cur_count) };
+          let (dst_chunks, dst_rem) = dst_u64.as_chunks_mut::<8>();
+          let (left_chunks, left_rem) = left_buf[..cur_count].as_chunks::<8>();
+          for (dc, lc) in dst_chunks.iter_mut().zip(left_chunks.iter()) {
+            unroll_8!(k => {
+              dc[k] |= shifted_dict[lc[k] as usize & 7];
+            });
+          }
+          for (d, l) in dst_rem.iter_mut().zip(left_rem.iter()) {
+            *d |= shifted_dict[*l as usize & 7];
+          }
         }
       } else {
         bitunpack_u64_slice(
