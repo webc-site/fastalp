@@ -1,5 +1,14 @@
 ## Changelog
 
+### v0.1.45
+
+- **Two-Stage Dynamic Outlier Budget for FOR Mode**:
+  Decoupled outlier pruning between preliminary screening and FOR-exclusive optimization. Constrained the pre-pruning budget to 16 exceptions to protect Delta differential encoding from excessive outlier overhead; once Delta is bypassed, expanded the FOR exception budget to 32, unlocking deeper bit-width reduction while strictly adhering to cost monotonicity. Datasets with isolated spikes achieve tighter packing and faster decoding (e.g. `medicare9` bit-width dropped from 9 to 8, boosting ratio to 6.73x and decoding throughput up to 40.96 GB/s).
+- **Delta Patch Artifact Purge & Zero-Overhead State Machine Transition**:
+  Purged predecessor patch artifacts at exception locations in FOR mode, eliminating double-counting in outlier histograms and premature aborts. Refined cached pruning guards in the state machine, enabling multi-stage exploration on initial blocks while preserving instant O(1) cache hits on subsequent chunks.
+- **Defensive Bit-Width Bounds & Soundness Hardening**:
+  Hardened target bit-width mask calculation with defensive bounds against potential shifts >= 64 bits. Cleaned up redundant buffer size calculations on unpruned branches, passing rigorous safety and architectural review with zero warnings.
+
 ### v0.1.44
 
 - **Branch-Free Repeat Run-Length Expansion**:
