@@ -203,16 +203,22 @@ impl<F: AlpFloat, D: AlpDecoder<F>> AlpConsumer<F> for ForConsumer<F, D> {
 pub struct AlpDeltaConsumer<F: AlpFloat, D: AlpDecoder<F>> {
   pub curr: F::Int,
   pub min_delta: F::Int,
+  pub m_steps: [F::Int; 4],
   pub decoder: D,
   pub _phantom: PhantomData<F>,
 }
 
 impl<F: AlpFloat, D: AlpDecoder<F>> AlpDeltaConsumer<F, D> {
   #[inline(always)]
-  pub const fn new(curr: F::Int, min_delta: F::Int, decoder: D) -> Self {
+  pub fn new(curr: F::Int, min_delta: F::Int, decoder: D) -> Self {
+    let m1 = min_delta;
+    let m2 = F::int_add(m1, m1);
+    let m3 = F::int_add(m2, m1);
+    let m4 = F::int_add(m2, m2);
     Self {
       curr,
       min_delta,
+      m_steps: [m1, m2, m3, m4],
       decoder,
       _phantom: PhantomData,
     }
@@ -222,37 +228,44 @@ impl<F: AlpFloat, D: AlpDecoder<F>> AlpDeltaConsumer<F, D> {
 impl<F: AlpFloat, D: AlpDecoder<F>> AlpConsumer<F> for AlpDeltaConsumer<F, D> {
   #[inline(always)]
   unsafe fn consume_8(&mut self, chunk: [u64; 8], dst_ptr: *mut F) {
-    let d0 = F::u64_to_int_add(chunk[0], self.min_delta);
-    let d1 = F::u64_to_int_add(chunk[1], self.min_delta);
-    let d2 = F::u64_to_int_add(chunk[2], self.min_delta);
-    let d3 = F::u64_to_int_add(chunk[3], self.min_delta);
-    let d4 = F::u64_to_int_add(chunk[4], self.min_delta);
-    let d5 = F::u64_to_int_add(chunk[5], self.min_delta);
-    let d6 = F::u64_to_int_add(chunk[6], self.min_delta);
-    let d7 = F::u64_to_int_add(chunk[7], self.min_delta);
+    let u0 = F::u64_to_int_add(chunk[0], F::ZERO_INT);
+    let u1 = F::u64_to_int_add(chunk[1], F::ZERO_INT);
+    let u2 = F::u64_to_int_add(chunk[2], F::ZERO_INT);
+    let u3 = F::u64_to_int_add(chunk[3], F::ZERO_INT);
+    let u4 = F::u64_to_int_add(chunk[4], F::ZERO_INT);
+    let u5 = F::u64_to_int_add(chunk[5], F::ZERO_INT);
+    let u6 = F::u64_to_int_add(chunk[6], F::ZERO_INT);
+    let u7 = F::u64_to_int_add(chunk[7], F::ZERO_INT);
 
-    // 结合律前缀和加法树：第一层与第二层与 curr 完全解耦并行计算
-    let s01 = F::int_add(d0, d1);
-    let s23 = F::int_add(d2, d3);
-    let s45 = F::int_add(d4, d5);
-    let s67 = F::int_add(d6, d7);
+    // 二叉平衡树并行计算两个 4 元组内的偏前缀和
+    let p01 = F::int_add(u0, u1);
+    let p23 = F::int_add(u2, u3);
+    let p45 = F::int_add(u4, u5);
+    let p67 = F::int_add(u6, u7);
 
-    let s0123 = F::int_add(s01, s23);
-    let s4567 = F::int_add(s45, s67);
-    let delta_total = F::int_add(s0123, s4567);
+    let p0123 = F::int_add(p01, p23);
+    let p4567 = F::int_add(p45, p67);
 
-    let curr = self.curr;
-    // 跨 8 元素块循环携带依赖链仅需 1 次单周期加法！
-    self.curr = F::int_add(curr, delta_total);
+    let m1 = self.m_steps[0];
+    let m2 = self.m_steps[1];
+    let m3 = self.m_steps[2];
+    let m4 = self.m_steps[3];
 
-    let c0 = F::int_add(curr, d0);
-    let c1 = F::int_add(curr, s01);
-    let c2 = F::int_add(c1, d2);
-    let c3 = F::int_add(curr, s0123);
-    let c4 = F::int_add(c3, d4);
-    let c5 = F::int_add(c3, s45);
-    let c6 = F::int_add(c5, d6);
-    let c7 = self.curr;
+    // 第一组 4 元素：基准为 curr
+    let b0 = self.curr;
+    let c0 = F::int_add(b0, F::int_add(u0, m1));
+    let c1 = F::int_add(b0, F::int_add(p01, m2));
+    let c2 = F::int_add(b0, F::int_add(F::int_add(p01, u2), m3));
+    let c3 = F::int_add(b0, F::int_add(p0123, m4));
+
+    // 第二组 4 元素：结构同构，基准无缝顺延为 c3
+    let b1 = c3;
+    let c4 = F::int_add(b1, F::int_add(u4, m1));
+    let c5 = F::int_add(b1, F::int_add(p45, m2));
+    let c6 = F::int_add(b1, F::int_add(F::int_add(p45, u6), m3));
+    let c7 = F::int_add(b1, F::int_add(p4567, m4));
+
+    self.curr = c7;
 
     let c = [c0, c1, c2, c3, c4, c5, c6, c7];
     unsafe {
