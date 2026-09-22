@@ -164,18 +164,28 @@ pub(crate) unsafe fn unpack_8<T: Copy, C: AlpConsumer<T>>(
   consumer: &mut C,
   dst_ptr: *mut T,
 ) {
-  let (chunks, rem) = unsafe { from_raw_parts(src_ptr, count).as_chunks::<CHUNK_8>() };
-  let mut idx = 0;
-  for chunk in chunks {
+  let mut i = 0;
+  while i + 16 <= count {
     unsafe {
-      consumer.consume_8(chunk.map(|b| b as u64), dst_ptr.add(idx));
+      let b0 = *src_ptr.add(i).cast::<[u8; 8]>();
+      let b1 = *src_ptr.add(i + 8).cast::<[u8; 8]>();
+      consumer.consume_8(arr_8!(k => b0[k] as u64), dst_ptr.add(i));
+      consumer.consume_8(arr_8!(k => b1[k] as u64), dst_ptr.add(i + 8));
     }
-    idx += CHUNK_8;
+    i += 16;
   }
-  for (i, &b) in rem.iter().enumerate() {
+  while i + 8 <= count {
     unsafe {
-      consumer.consume_1(b as u64, dst_ptr.add(idx + i));
+      let b = *src_ptr.add(i).cast::<[u8; 8]>();
+      consumer.consume_8(arr_8!(k => b[k] as u64), dst_ptr.add(i));
     }
+    i += 8;
+  }
+  while i < count {
+    unsafe {
+      consumer.consume_1(*src_ptr.add(i) as u64, dst_ptr.add(i));
+    }
+    i += 1;
   }
 }
 
