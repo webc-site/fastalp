@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790103854039,
+  "lastUpdate": 1790127400170,
   "repoUrl": "https://github.com/webc-site/fastalp",
   "entries": {
     "FastALP Microbenchmarks": [
@@ -1632,6 +1632,210 @@ window.BENCHMARK_DATA = {
             "value": 7122,
             "unit": "ns",
             "extra": "1.15 GB/s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "x-at-01@googlegroups.com",
+            "name": "x-at-01",
+            "username": "x-at-01"
+          },
+          "committer": {
+            "email": "x-at-01@googlegroups.com",
+            "name": "x-at-01",
+            "username": "x-at-01"
+          },
+          "distinct": true,
+          "id": "50a222114adccabe3bd47c5f17438d4de8007ab3",
+          "message": "docs: supplement fastalp v0.1.48 changelog and compile README.md\n文档: 补充 fastalp v0.1.48 更新日志并编译 README.md",
+          "timestamp": "2026-09-23T03:02:16+08:00",
+          "tree_id": "8ac09a6e8bd801bbfa20ca5041e50a2b44fe1b8a",
+          "url": "https://github.com/webc-site/fastalp/commit/50a222114adccabe3bd47c5f17438d4de8007ab3"
+        },
+        "date": 1790127399654,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bench_air_sensor_f64_cached",
+            "value": 8635,
+            "unit": "ns",
+            "extra": "0.95 GB/s"
+          },
+          {
+            "name": "bench_air_sensor_f64_decompress",
+            "value": 1857,
+            "unit": "ns",
+            "extra": "4.41 GB/s"
+          },
+          {
+            "name": "bench_air_sensor_f64_sampled",
+            "value": 32590,
+            "unit": "ns",
+            "extra": "0.25 GB/s"
+          },
+          {
+            "name": "bench_bitcoin_f64_cached",
+            "value": 4978,
+            "unit": "ns",
+            "extra": "1.65 GB/s"
+          },
+          {
+            "name": "bench_bitcoin_f64_decompress",
+            "value": 1712,
+            "unit": "ns",
+            "extra": "4.79 GB/s"
+          },
+          {
+            "name": "bench_bitcoin_f64_sampled",
+            "value": 17640,
+            "unit": "ns",
+            "extra": "0.46 GB/s"
+          },
+          {
+            "name": "bench_city_temperature_f32_cached",
+            "value": 921,
+            "unit": "ns",
+            "extra": "4.45 GB/s"
+          },
+          {
+            "name": "bench_city_temperature_f32_decompress",
+            "value": 1182,
+            "unit": "ns",
+            "extra": "3.47 GB/s"
+          },
+          {
+            "name": "bench_city_temperature_f32_sampled",
+            "value": 5995,
+            "unit": "ns",
+            "extra": "0.68 GB/s"
+          },
+          {
+            "name": "bench_city_temperature_f64_cached",
+            "value": 2834,
+            "unit": "ns",
+            "extra": "2.89 GB/s"
+          },
+          {
+            "name": "bench_city_temperature_f64_decompress",
+            "value": 1306,
+            "unit": "ns",
+            "extra": "6.27 GB/s"
+          },
+          {
+            "name": "bench_city_temperature_f64_sampled",
+            "value": 11850,
+            "unit": "ns",
+            "extra": "0.69 GB/s"
+          },
+          {
+            "name": "bench_food_prices_f64_cached",
+            "value": 7393,
+            "unit": "ns",
+            "extra": "1.11 GB/s"
+          },
+          {
+            "name": "bench_food_prices_f64_decompress",
+            "value": 1311,
+            "unit": "ns",
+            "extra": "6.25 GB/s"
+          },
+          {
+            "name": "bench_food_prices_f64_sampled",
+            "value": 54230,
+            "unit": "ns",
+            "extra": "0.15 GB/s"
+          },
+          {
+            "name": "bench_large_batch_f32_cached",
+            "value": 50560,
+            "unit": "ns",
+            "extra": "5.18 GB/s"
+          },
+          {
+            "name": "bench_large_batch_f32_decompress",
+            "value": 33160,
+            "unit": "ns",
+            "extra": "7.91 GB/s"
+          },
+          {
+            "name": "bench_large_batch_f32_sampled",
+            "value": 84860,
+            "unit": "ns",
+            "extra": "3.09 GB/s"
+          },
+          {
+            "name": "bench_large_batch_f64_cached",
+            "value": 155400,
+            "unit": "ns",
+            "extra": "3.37 GB/s"
+          },
+          {
+            "name": "bench_large_batch_f64_decompress",
+            "value": 66730,
+            "unit": "ns",
+            "extra": "7.86 GB/s"
+          },
+          {
+            "name": "bench_large_batch_f64_sampled",
+            "value": 201100,
+            "unit": "ns",
+            "extra": "2.61 GB/s"
+          },
+          {
+            "name": "bench_neon_air_pressure_f64_cached",
+            "value": 4402,
+            "unit": "ns",
+            "extra": "1.86 GB/s"
+          },
+          {
+            "name": "bench_neon_air_pressure_f64_decompress",
+            "value": 1777,
+            "unit": "ns",
+            "extra": "4.61 GB/s"
+          },
+          {
+            "name": "bench_neon_air_pressure_f64_sampled",
+            "value": 12770,
+            "unit": "ns",
+            "extra": "0.64 GB/s"
+          },
+          {
+            "name": "bench_stocks_de_f32_cached",
+            "value": 1803,
+            "unit": "ns",
+            "extra": "2.27 GB/s"
+          },
+          {
+            "name": "bench_stocks_de_f32_decompress",
+            "value": 961.3,
+            "unit": "ns",
+            "extra": "4.26 GB/s"
+          },
+          {
+            "name": "bench_stocks_de_f32_sampled",
+            "value": 3380,
+            "unit": "ns",
+            "extra": "1.21 GB/s"
+          },
+          {
+            "name": "bench_stocks_de_f64_cached",
+            "value": 2238,
+            "unit": "ns",
+            "extra": "3.66 GB/s"
+          },
+          {
+            "name": "bench_stocks_de_f64_decompress",
+            "value": 1211,
+            "unit": "ns",
+            "extra": "6.76 GB/s"
+          },
+          {
+            "name": "bench_stocks_de_f64_sampled",
+            "value": 9662,
+            "unit": "ns",
+            "extra": "0.85 GB/s"
           }
         ]
       }
